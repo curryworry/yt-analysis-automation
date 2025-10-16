@@ -24,9 +24,16 @@ class OpenAIService:
         """
         # Initialize OpenAI client without proxy settings for Cloud Functions compatibility
         import os
-        os.environ.pop('HTTP_PROXY', None)
-        os.environ.pop('HTTPS_PROXY', None)
-        self.client = OpenAI(api_key=api_key)
+        # Remove any proxy environment variables that cause issues in Cloud Functions
+        for proxy_var in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']:
+            os.environ.pop(proxy_var, None)
+
+        # Initialize client with explicit no-proxy configuration
+        try:
+            self.client = OpenAI(api_key=api_key, http_client=None)
+        except TypeError:
+            # Fallback for older OpenAI versions
+            self.client = OpenAI(api_key=api_key)
         self.model = model
         self.api_calls_made = 0
 
