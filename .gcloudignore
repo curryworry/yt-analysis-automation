@@ -1,0 +1,12 @@
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.env
+.env.example
+*.md
+deploy.sh
+test_*.py
+.DS_Store
+.vscode/
+.idea/

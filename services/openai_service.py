@@ -22,6 +22,10 @@ class OpenAIService:
             system_prompt: System prompt for the model
             user_prompt_template: Template for user prompt
         """
+        # Initialize OpenAI client without proxy settings for Cloud Functions compatibility
+        import os
+        os.environ.pop('HTTP_PROXY', None)
+        os.environ.pop('HTTPS_PROXY', None)
         self.client = OpenAI(api_key=api_key)
         self.model = model
         self.api_calls_made = 0

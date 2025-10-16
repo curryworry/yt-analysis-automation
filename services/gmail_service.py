@@ -31,10 +31,28 @@ class GmailService:
     def authenticate(self):
         """Authenticate and create Gmail API service"""
         try:
-            creds = Credentials.from_authorized_user_file(
-                self.token_path,
-                ['https://www.googleapis.com/auth/gmail.readonly']
-            )
+            import json
+
+            # Handle both file paths and JSON strings (from secrets)
+            if self.token_path and os.path.exists(self.token_path):
+                # Local file path
+                creds = Credentials.from_authorized_user_file(
+                    self.token_path,
+                    ['https://www.googleapis.com/auth/gmail.readonly',
+                     'https://www.googleapis.com/auth/gmail.send']
+                )
+            else:
+                # Environment variable with JSON string
+                token_json = os.getenv('GMAIL_TOKEN')
+                if token_json:
+                    token_info = json.loads(token_json)
+                    creds = Credentials.from_authorized_user_info(
+                        token_info,
+                        ['https://www.googleapis.com/auth/gmail.readonly',
+                         'https://www.googleapis.com/auth/gmail.send']
+                    )
+                else:
+                    raise ValueError("No Gmail token found in file or environment")
 
             self.service = build('gmail', 'v1', credentials=creds)
             logger.info("Gmail authentication successful")
