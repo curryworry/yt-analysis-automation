@@ -1,12 +1,13 @@
 """
 OpenAI Service Module
 Handles AI-powered channel categorization using GPT-4o-mini
+Uses REST API directly to avoid Cloud Functions proxy issues
 """
 
 import json
 import logging
 import time
-from openai import OpenAI
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 class OpenAIService:
     def __init__(self, api_key, model='gpt-4o-mini', system_prompt=None, user_prompt_template=None):
         """
-        Initialize OpenAI service
+        Initialize OpenAI service using REST API
 
         Args:
             api_key: OpenAI API key
@@ -22,20 +23,10 @@ class OpenAIService:
             system_prompt: System prompt for the model
             user_prompt_template: Template for user prompt
         """
-        # Initialize OpenAI client without proxy settings for Cloud Functions compatibility
-        import os
-        # Remove any proxy environment variables that cause issues in Cloud Functions
-        for proxy_var in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']:
-            os.environ.pop(proxy_var, None)
-
-        # Initialize client with explicit no-proxy configuration
-        try:
-            self.client = OpenAI(api_key=api_key, http_client=None)
-        except TypeError:
-            # Fallback for older OpenAI versions
-            self.client = OpenAI(api_key=api_key)
+        self.api_key = api_key
         self.model = model
         self.api_calls_made = 0
+        self.api_url = "https://api.openai.com/v1/chat/completions"
 
         self.system_prompt = system_prompt or """You are an expert at analyzing YouTube channels to determine if they primarily target children.
 Consider factors like: content themes, language complexity, visual style, and target audience."""
@@ -59,7 +50,7 @@ Example response:
 
     def categorize_channel(self, channel_metadata, max_retries=3):
         """
-        Categorize a YouTube channel using OpenAI
+        Categorize a YouTube channel using OpenAI REST API
 
         Args:
             channel_metadata: Dict containing channel metadata
@@ -82,21 +73,36 @@ Example response:
                     recent_titles=', '.join(channel_metadata.get('recent_video_titles', [])[:5])
                 )
 
-                # Call OpenAI API
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
+                # Prepare request payload
+                payload = {
+                    "model": self.model,
+                    "messages": [
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    temperature=0.3,  # Lower temperature for more consistent results
-                    response_format={"type": "json_object"}
+                    "temperature": 0.3,
+                    "response_format": {"type": "json_object"}
+                }
+
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+
+                # Call OpenAI REST API
+                response = requests.post(
+                    self.api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=30
                 )
 
+                response.raise_for_status()
                 self.api_calls_made += 1
 
                 # Parse response
-                result_text = response.choices[0].message.content
+                response_data = response.json()
+                result_text = response_data['choices'][0]['message']['content']
                 result = json.loads(result_text)
 
                 # Validate result format
@@ -116,12 +122,19 @@ Example response:
                 retry_count += 1
                 time.sleep(2 ** retry_count)
 
-            except Exception as error:
+            except requests.exceptions.RequestException as error:
                 logger.error(f"Error calling OpenAI API (attempt {retry_count + 1}/{max_retries}): {error}")
                 retry_count += 1
 
                 if retry_count < max_retries:
                     time.sleep(2 ** retry_count)  # Exponential backoff
+
+            except Exception as error:
+                logger.error(f"Unexpected error (attempt {retry_count + 1}/{max_retries}): {error}")
+                retry_count += 1
+
+                if retry_count < max_retries:
+                    time.sleep(2 ** retry_count)
 
         # Return default result if all retries fail
         logger.error(f"Failed to categorize channel after {max_retries} attempts: "

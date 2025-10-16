@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/ashwin.sundaram/Library/CloudStorage/Dropbox-AcquireOnline/Ashwin Sundaram/Ashwin/Cerebro/Cerebrus/yt-automation/test_local.py", line 8, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
