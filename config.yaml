@@ -1,0 +1,69 @@
+# Keyword Configuration for Pre-filtering Channels
+# Edit this file to add/remove keywords without changing code
+
+keywords:
+  - baby
+  - nursery
+  - rhyme
+  - kid
+  - kids
+  - children
+  - toddler
+  - preschool
+
+# Additional Configuration
+processing:
+  # Batch size for processing channels
+  batch_size: 100
+
+  # Maximum concurrent workers
+  max_workers: 5
+
+  # Delay between API calls (seconds) to respect rate limits
+  rate_limit_delay: 0.1
+
+  # Maximum retries for failed API calls
+  max_retries: 3
+
+# OpenAI Categorization Prompt Template
+openai:
+  system_prompt: |
+    You are an expert at analyzing YouTube channels to determine if they primarily target children.
+    Consider factors like: content themes, language complexity, visual style, and target audience.
+
+  user_prompt_template: |
+    Analyze this YouTube channel and determine if it primarily targets children (under 13):
+
+    Channel Name: {channel_name}
+    Description: {description}
+    Custom URL: {custom_url}
+    Subscriber Count: {subscriber_count}
+    Video Count: {video_count}
+    Recent Video Titles: {recent_titles}
+
+    Respond with a JSON object containing:
+    - "is_children_content": true/false
+    - "confidence": "high"/"medium"/"low"
+    - "reasoning": brief explanation (1-2 sentences)
+
+    Example response:
+    {{"is_children_content": true, "confidence": "high", "reasoning": "Channel features nursery rhymes and animations clearly targeting toddlers and preschoolers."}}
+
+# Email Configuration
+email:
+  subject: "DV360 Children's Channel Analysis Results - {date}"
+  body_template: |
+    Hello,
+
+    Attached is the analysis of YouTube channels from the DV360 placement report.
+
+    Summary:
+    - Total channels analyzed: {total_channels}
+    - Flagged as children's content: {flagged_count}
+    - Cache hits: {cache_hits}
+    - New API calls: {api_calls}
+
+    Processing time: {processing_time}
+
+    Best regards,
+    Automated DV360 Channel Analyzer

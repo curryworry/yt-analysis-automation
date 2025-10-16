@@ -3,6 +3,7 @@ credentials.json
 gmail_token.json
 token.json
 *.json.backup
+yt-channel-analysis-*.json
 
 # Python
 __pycache__/
