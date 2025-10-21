@@ -100,7 +100,6 @@ def process_dv360_report(request=None):
         logger.info("=" * 80)
 
         message_id = gmail_service.find_latest_dv360_email(
-            sender_email=os.getenv('GMAIL_SENDER_EMAIL'),
             subject_filter=os.getenv('GMAIL_SUBJECT_FILTER'),
             days_back=7
         )

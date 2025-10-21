@@ -62,12 +62,11 @@ class GmailService:
             logger.error(f"Gmail authentication failed: {str(e)}")
             raise
 
-    def find_latest_dv360_email(self, sender_email, subject_filter, days_back=7):
+    def find_latest_dv360_email(self, subject_filter, days_back=7):
         """
         Find the most recent DV360 report email
 
         Args:
-            sender_email: Email address to filter by sender
             subject_filter: Subject line filter text
             days_back: Number of days to search back
 
@@ -78,8 +77,8 @@ class GmailService:
             # Calculate date for search query
             date_filter = (datetime.now() - timedelta(days=days_back)).strftime('%Y/%m/%d')
 
-            # Build search query
-            query = f'from:{sender_email} subject:"{subject_filter}" after:{date_filter} has:attachment'
+            # Build search query - filter by subject only
+            query = f'subject:"{subject_filter}" after:{date_filter} has:attachment'
 
             logger.info(f"Searching for emails with query: {query}")
 
