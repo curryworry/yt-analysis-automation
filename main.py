@@ -316,17 +316,25 @@ def process_dv360_report(request=None):
                     firestore_service.batch_save_categories(firestore_auto_flagged)
                     logger.info(f"✓ Saved {len(firestore_auto_flagged)} auto-flagged channels to Firestore")
 
-            # Step 10: Generate results CSV
+            # Step 10: Generate CSV lists (Inclusion & Exclusion)
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 10: Generating results CSV")
+            logger.info("STEP 10: Generating CSV lists")
             logger.info("=" * 80)
 
-            results_csv_path = os.path.join(temp_dir, f'children_channels_{datetime.now().strftime("%Y%m%d")}.csv')
-            csv_processor.create_results_csv(final_results, results_csv_path)
+            date_str = datetime.now().strftime("%Y%m%d")
 
-            flagged_count = sum(1 for r in final_results if r.get('is_children_content'))
+            # Generate inclusion list (SAFE channels - INCLUDE in campaigns)
+            inclusion_list_path = os.path.join(temp_dir, f'inclusion_list_safe_channels_{date_str}.csv')
+            safe_count = csv_processor.create_inclusion_list(final_results, inclusion_list_path)
 
-            # Step 11: Send results email
+            # Generate exclusion list (children's content - EXCLUDE from campaigns)
+            exclusion_list_path = os.path.join(temp_dir, f'exclusion_list_children_channels_{date_str}.csv')
+            flagged_count = csv_processor.create_exclusion_list(final_results, exclusion_list_path)
+
+            logger.info(f"✓ Inclusion list (SAFE/INCLUDE): {safe_count} channels")
+            logger.info(f"✓ Exclusion list (BLOCK/EXCLUDE): {flagged_count} channels")
+
+            # Step 11: Send results email with both lists
             logger.info("\n" + "=" * 80)
             logger.info("STEP 11: Sending results email")
             logger.info("=" * 80)
@@ -340,16 +348,18 @@ def process_dv360_report(request=None):
             email_body = config.get('email', {}).get('body_template', '').format(
                 total_channels=len(channel_data),
                 flagged_count=flagged_count,
+                safe_count=safe_count,
                 cache_hits=len(cached_results),
                 api_calls=len(channels_to_analyze) + len(auto_flagged_new),
-                processing_time=f"{processing_time:.2f} seconds"
+                processing_time=f"{processing_time:.2f} seconds",
+                date=date_str
             )
 
             gmail_service.send_results_email(
                 recipient_email=os.getenv('RECIPIENT_EMAIL'),
                 subject=email_subject,
                 body=email_body,
-                attachment_path=results_csv_path
+                attachment_paths=[inclusion_list_path, exclusion_list_path]
             )
 
             # Final summary

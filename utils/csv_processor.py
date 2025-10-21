@@ -269,6 +269,106 @@ class CSVProcessor:
             logger.error(f"Error creating results CSV: {error}")
             raise
 
+    def create_inclusion_list(self, results, output_path):
+        """
+        Create CSV inclusion list (SAFE channels to INCLUDE in campaigns)
+
+        Args:
+            results: List of categorization result dicts
+            output_path: Path to save CSV file
+
+        Returns:
+            int: Number of channels in inclusion list
+        """
+        try:
+            safe_channels = [r for r in results if not r.get('is_children_content')]
+
+            with open(output_path, 'w', newline='', encoding='utf-8') as f:
+                fieldnames = [
+                    'channel_name',
+                    'channel_url',
+                    'channel_id',
+                    'confidence',
+                    'reasoning',
+                    'impressions'
+                ]
+
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for result in safe_channels:
+                    # Extract channel ID from URL
+                    channel_url = result.get('channel_url', '')
+                    channel_id = channel_url.split('/')[-1] if '/channel/' in channel_url else ''
+
+                    writer.writerow({
+                        'channel_name': result.get('channel_name', 'Unknown'),
+                        'channel_url': channel_url,
+                        'channel_id': channel_id,
+                        'confidence': result.get('confidence', 'unknown'),
+                        'reasoning': result.get('reasoning', ''),
+                        'impressions': result.get('impressions', 0)
+                    })
+
+            logger.info(f"Created inclusion list (SAFE/INCLUDE) with {len(safe_channels)} channels at: {output_path}")
+            return len(safe_channels)
+
+        except Exception as error:
+            logger.error(f"Error creating inclusion list: {error}")
+            raise
+
+    def create_exclusion_list(self, results, output_path):
+        """
+        Create CSV exclusion list (children's content channels to EXCLUDE/BLOCK from campaigns)
+
+        Args:
+            results: List of categorization result dicts
+            output_path: Path to save CSV file
+
+        Returns:
+            int: Number of channels in exclusion list
+        """
+        try:
+            children_channels = [r for r in results if r.get('is_children_content')]
+
+            with open(output_path, 'w', newline='', encoding='utf-8') as f:
+                fieldnames = [
+                    'channel_name',
+                    'channel_url',
+                    'channel_id',
+                    'confidence',
+                    'reasoning',
+                    'impressions',
+                    'advertisers',
+                    'insertion_orders'
+                ]
+
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for result in children_channels:
+                    # Extract channel ID from URL
+                    channel_url = result.get('channel_url', '')
+                    channel_id = channel_url.split('/')[-1] if '/channel/' in channel_url else ''
+
+                    writer.writerow({
+                        'channel_name': result.get('channel_name', 'Unknown'),
+                        'channel_url': channel_url,
+                        'channel_id': channel_id,
+                        'confidence': result.get('confidence', 'unknown'),
+                        'reasoning': result.get('reasoning', ''),
+                        'impressions': result.get('impressions', 0),
+                        'advertisers': ', '.join(result.get('advertisers', [])),
+                        'insertion_orders': ', '.join(result.get('insertion_orders', []))
+                    })
+
+            logger.info(f"Created exclusion list (BLOCK/EXCLUDE) with {len(children_channels)} channels at: {output_path}")
+            return len(children_channels)
+
+        except Exception as error:
+            logger.error(f"Error creating exclusion list: {error}")
+            raise
+
     def get_stats(self):
         """
         Get processing statistics

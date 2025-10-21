@@ -53,17 +53,54 @@ openai:
 email:
   subject: "DV360 Children's Channel Analysis Results - {date}"
   body_template: |
-    Hello,
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+      <h2 style="color: #2c3e50;">DV360 YouTube Channel Analysis Complete</h2>
 
-    Attached is the analysis of YouTube channels from the DV360 placement report.
+      <p>Hello,</p>
 
-    Summary:
-    - Total channels analyzed: {total_channels}
-    - Flagged as children's content: {flagged_count}
-    - Cache hits: {cache_hits}
-    - New API calls: {api_calls}
+      <p>The automated analysis of YouTube channels from the DV360 placement report has completed successfully.</p>
 
-    Processing time: {processing_time}
+      <h3 style="color: #e74c3c;">Summary Statistics</h3>
+      <ul>
+        <li><strong>Total channels analyzed:</strong> {total_channels}</li>
+        <li><strong>Flagged as children's content:</strong> {flagged_count} channels</li>
+        <li><strong>Safe channels (not children's content):</strong> {safe_count} channels</li>
+        <li><strong>Cache hits (previously analyzed):</strong> {cache_hits}</li>
+        <li><strong>New analyses this run:</strong> {api_calls}</li>
+        <li><strong>Processing time:</strong> {processing_time}</li>
+      </ul>
 
-    Best regards,
-    Automated DV360 Channel Analyzer
+      <h3 style="color: #27ae60;">Attached Files</h3>
+      <p>This email contains <strong>two CSV files</strong>:</p>
+
+      <div style="background-color: #fee; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0;">
+        <h4 style="margin-top: 0; color: #e74c3c;">Inclusion List (SAFE Channels)</h4>
+        <p><strong>File:</strong> <code>inclusion_list_safe_channels_{date}.csv</code></p>
+        <p>Contains <strong>{flagged_count} channels</strong> identified as children's content that should be <strong>BLOCKED</strong> from DV360 campaigns.</p>
+        <p><em>Use this list to exclude these channels from your ad placements.</em></p>
+      </div>
+
+      <div style="background-color: #efe; padding: 15px; border-left: 4px solid #27ae60; margin: 15px 0;">
+        <h4 style="margin-top: 0; color: #27ae60;">Exclusion List (BLOCK These Channels)</h4>
+        <p><strong>File:</strong> <code>exclusion_list_children_channels_{date}.csv</code></p>
+        <p>Contains <strong>{safe_count} channels</strong> that are <strong>NOT</strong> children's content and are safe for advertising.</p>
+        <p><em>These channels passed the analysis and do not target children.</em></p>
+      </div>
+
+      <h3 style="color: #3498db;">Caching & Cost Savings</h3>
+      <p>All channels have been cached in Firestore. Future runs will be significantly faster and cheaper:</p>
+      <ul>
+        <li>Cached channels: <strong>{cache_hits}</strong> (reused from previous analysis)</li>
+        <li>New analyses: <strong>{api_calls}</strong> (incurred API costs)</li>
+        <li>Expected cache hit rate in next run: <strong>~90%</strong></li>
+      </ul>
+
+      <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+
+      <p style="color: #7f8c8d; font-size: 12px;">
+        <em>This is an automated email from the DV360 YouTube Channel Analyzer.<br>
+        Powered by Google Cloud Functions, YouTube Data API, and OpenAI GPT-4o-mini.</em>
+      </p>
+    </body>
+    </html>
