@@ -135,30 +135,40 @@ def process_dv360_report(request=None):
             rows = csv_processor.read_dv360_csv(csv_path)
             channel_data = csv_processor.extract_youtube_channels(rows)
 
-            # Step 5: Pre-filter channels by keywords
+            # Step 5: Separate channels by keyword matching
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 5: Pre-filtering channels by keywords")
+            logger.info("STEP 5: Categorizing channels by keyword matching")
             logger.info("=" * 80)
 
-            filtered_channels = csv_processor.filter_channels_by_keywords(channel_data)
+            keyword_matched = {}  # Obvious children's content
+            needs_analysis = {}   # Needs OpenAI analysis
 
-            if not filtered_channels:
-                logger.warning("No channels matched keyword filters")
-                return {'warning': 'No channels matched filters'}
+            for channel_url, data in channel_data.items():
+                placement_name = data.get('placement_name', '').lower()
 
-            # Step 6: Check Firestore cache
+                # Check if any keyword is in the placement name
+                if any(keyword.lower() in placement_name for keyword in keywords):
+                    keyword_matched[channel_url] = data
+                    logger.info(f"Keyword match: {placement_name[:60]}... → Auto-flagged as children's content")
+                else:
+                    needs_analysis[channel_url] = data
+
+            logger.info(f"Keyword-matched (obvious children's content): {len(keyword_matched)}")
+            logger.info(f"Needs OpenAI analysis: {len(needs_analysis)}")
+
+            # Step 6: Check Firestore cache for all channels
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 6: Checking Firestore cache for known channels")
+            logger.info("STEP 6: Checking Firestore cache")
             logger.info("=" * 80)
 
-            channel_urls = list(filtered_channels.keys())
-            cached_results = firestore_service.batch_get_cached_categories(channel_urls)
+            all_channel_urls = list(channel_data.keys())
+            cached_results = firestore_service.batch_get_cached_categories(all_channel_urls)
 
-            # Separate cached vs new channels
-            channels_to_analyze = []
+            # Process keyword-matched channels
             final_results = []
+            auto_flagged_new = []
 
-            for channel_url, data in filtered_channels.items():
+            for channel_url, data in keyword_matched.items():
                 if channel_url in cached_results:
                     # Use cached result
                     cached = cached_results[channel_url]
@@ -174,9 +184,39 @@ def process_dv360_report(request=None):
                         'cached': True
                     })
                 else:
-                    channels_to_analyze.append(channel_url)
+                    # Auto-flag as children's content (keyword match)
+                    auto_flagged_new.append({
+                        'channel_url': channel_url,
+                        'placement_name': data['placement_name'],
+                        'impressions': data['impressions'],
+                        'advertisers': data['advertisers'],
+                        'insertion_orders': data['insertion_orders']
+                    })
 
-            logger.info(f"Cache hits: {len(cached_results)}, New channels to analyze: {len(channels_to_analyze)}")
+            # Separate channels that need OpenAI analysis
+            channels_to_analyze = []
+            for channel_url in needs_analysis.keys():
+                if channel_url not in cached_results:
+                    channels_to_analyze.append(channel_url)
+                else:
+                    # Use cached result
+                    cached = cached_results[channel_url]
+                    data = needs_analysis[channel_url]
+                    final_results.append({
+                        'channel_url': channel_url,
+                        'channel_name': cached['channel_name'],
+                        'is_children_content': cached['is_children_content'],
+                        'confidence': cached['confidence'],
+                        'reasoning': cached['reasoning'],
+                        'impressions': data['impressions'],
+                        'advertisers': data['advertisers'],
+                        'insertion_orders': data['insertion_orders'],
+                        'cached': True
+                    })
+
+            logger.info(f"Cache hits: {len(cached_results)}")
+            logger.info(f"Auto-flagged (new keyword matches): {len(auto_flagged_new)}")
+            logger.info(f"New channels needing OpenAI analysis: {len(channels_to_analyze)}")
 
             # Step 7: Fetch YouTube metadata for new channels
             if channels_to_analyze:
@@ -214,10 +254,10 @@ def process_dv360_report(request=None):
                     channel_url = result['channel_url']
 
                     # Add impression data
-                    if channel_url in filtered_channels:
-                        result['impressions'] = filtered_channels[channel_url]['impressions']
-                        result['advertisers'] = filtered_channels[channel_url]['advertisers']
-                        result['insertion_orders'] = filtered_channels[channel_url]['insertion_orders']
+                    if channel_url in needs_analysis:
+                        result['impressions'] = needs_analysis[channel_url]['impressions']
+                        result['advertisers'] = needs_analysis[channel_url]['advertisers']
+                        result['insertion_orders'] = needs_analysis[channel_url]['insertion_orders']
 
                     result['cached'] = False
                     final_results.append(result)
@@ -233,6 +273,48 @@ def process_dv360_report(request=None):
 
                 if firestore_save_data:
                     firestore_service.batch_save_categories(firestore_save_data)
+
+            # Step 9.5: Process auto-flagged keyword-matched channels
+            if auto_flagged_new:
+                logger.info("\n" + "=" * 80)
+                logger.info(f"STEP 9.5: Processing {len(auto_flagged_new)} auto-flagged channels")
+                logger.info("=" * 80)
+
+                firestore_auto_flagged = []
+
+                for auto_flag in auto_flagged_new:
+                    channel_url = auto_flag['channel_url']
+
+                    # Fetch basic channel name from YouTube
+                    metadata = youtube_service.get_channel_metadata(channel_url)
+
+                    channel_name = metadata['channel_name'] if metadata else auto_flag['placement_name']
+
+                    # Add to final results
+                    final_results.append({
+                        'channel_url': channel_url,
+                        'channel_name': channel_name,
+                        'is_children_content': True,
+                        'confidence': 'high',
+                        'reasoning': f"Auto-flagged based on keyword match in placement name: '{auto_flag['placement_name']}'",
+                        'impressions': auto_flag['impressions'],
+                        'advertisers': auto_flag['advertisers'],
+                        'insertion_orders': auto_flag['insertion_orders'],
+                        'cached': False
+                    })
+
+                    # Save to Firestore
+                    firestore_auto_flagged.append({
+                        'channel_url': channel_url,
+                        'channel_name': channel_name,
+                        'is_children_content': True,
+                        'confidence': 'high',
+                        'reasoning': f"Auto-flagged based on keyword match in placement name: '{auto_flag['placement_name']}'"
+                    })
+
+                if firestore_auto_flagged:
+                    firestore_service.batch_save_categories(firestore_auto_flagged)
+                    logger.info(f"✓ Saved {len(firestore_auto_flagged)} auto-flagged channels to Firestore")
 
             # Step 10: Generate results CSV
             logger.info("\n" + "=" * 80)
@@ -256,10 +338,10 @@ def process_dv360_report(request=None):
             )
 
             email_body = config.get('email', {}).get('body_template', '').format(
-                total_channels=len(filtered_channels),
+                total_channels=len(channel_data),
                 flagged_count=flagged_count,
                 cache_hits=len(cached_results),
-                api_calls=len(channels_to_analyze),
+                api_calls=len(channels_to_analyze) + len(auto_flagged_new),
                 processing_time=f"{processing_time:.2f} seconds"
             )
 
@@ -276,9 +358,11 @@ def process_dv360_report(request=None):
             logger.info("=" * 80)
             logger.info(f"Total rows processed: {csv_processor.total_rows}")
             logger.info(f"Unique channels found: {len(channel_data)}")
-            logger.info(f"Channels after keyword filter: {len(filtered_channels)}")
+            logger.info(f"Keyword-matched (auto-flagged): {len(keyword_matched)}")
+            logger.info(f"Needed OpenAI analysis: {len(needs_analysis)}")
             logger.info(f"Cache hits: {len(cached_results)}")
-            logger.info(f"New channels analyzed: {len(channels_to_analyze)}")
+            logger.info(f"New OpenAI analyses: {len(channels_to_analyze)}")
+            logger.info(f"New auto-flagged: {len(auto_flagged_new)}")
             logger.info(f"Channels flagged as children's content: {flagged_count}")
             logger.info(f"YouTube API calls: {youtube_service.api_calls_made}")
             logger.info(f"OpenAI API calls: {openai_service.api_calls_made}")
@@ -289,9 +373,11 @@ def process_dv360_report(request=None):
                 'status': 'success',
                 'total_rows': csv_processor.total_rows,
                 'unique_channels': len(channel_data),
-                'filtered_channels': len(filtered_channels),
+                'keyword_matched': len(keyword_matched),
+                'needs_analysis': len(needs_analysis),
                 'cache_hits': len(cached_results),
-                'new_channels_analyzed': len(channels_to_analyze),
+                'new_openai_analyses': len(channels_to_analyze),
+                'new_auto_flagged': len(auto_flagged_new),
                 'flagged_count': flagged_count,
                 'youtube_api_calls': youtube_service.api_calls_made,
                 'openai_api_calls': openai_service.api_calls_made,
