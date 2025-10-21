@@ -15,6 +15,7 @@ from services.gmail_service import GmailService
 from services.youtube_service import YouTubeService
 from services.firestore_service import FirestoreService
 from services.openai_service import OpenAIService
+from services.gcs_service import GCSService
 from utils.csv_processor import CSVProcessor
 
 # Configure logging
@@ -85,6 +86,10 @@ def process_dv360_report(request=None):
             model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
             system_prompt=config.get('openai', {}).get('system_prompt'),
             user_prompt_template=config.get('openai', {}).get('user_prompt_template')
+        )
+
+        gcs_service = GCSService(
+            bucket_name=os.getenv('GCP_BUCKET_NAME')
         )
 
         csv_processor = CSVProcessor(keywords=keywords)
@@ -334,9 +339,32 @@ def process_dv360_report(request=None):
             logger.info(f"✓ Inclusion list (SAFE/INCLUDE): {safe_count} channels")
             logger.info(f"✓ Exclusion list (BLOCK/EXCLUDE): {flagged_count} channels")
 
-            # Step 11: Send results email with both lists
+            # Step 11: Upload CSVs to Cloud Storage
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 11: Sending results email")
+            logger.info("STEP 11: Uploading CSVs to Cloud Storage")
+            logger.info("=" * 80)
+
+            # Upload inclusion list
+            inclusion_blob_name = f'dv360-reports/{date_str}/inclusion_list_safe_channels_{date_str}.csv'
+            inclusion_gcs_uri, inclusion_url = gcs_service.upload_and_get_url(
+                inclusion_list_path,
+                inclusion_blob_name,
+                expiration_hours=168  # 7 days
+            )
+            logger.info(f"✓ Uploaded inclusion list to: {inclusion_gcs_uri}")
+
+            # Upload exclusion list
+            exclusion_blob_name = f'dv360-reports/{date_str}/exclusion_list_children_channels_{date_str}.csv'
+            exclusion_gcs_uri, exclusion_url = gcs_service.upload_and_get_url(
+                exclusion_list_path,
+                exclusion_blob_name,
+                expiration_hours=168  # 7 days
+            )
+            logger.info(f"✓ Uploaded exclusion list to: {exclusion_gcs_uri}")
+
+            # Step 12: Send results email with download links
+            logger.info("\n" + "=" * 80)
+            logger.info("STEP 12: Sending results email with download links")
             logger.info("=" * 80)
 
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -352,14 +380,15 @@ def process_dv360_report(request=None):
                 cache_hits=len(cached_results),
                 api_calls=len(channels_to_analyze) + len(auto_flagged_new),
                 processing_time=f"{processing_time:.2f} seconds",
-                date=date_str
+                date=date_str,
+                inclusion_url=inclusion_url,
+                exclusion_url=exclusion_url
             )
 
             gmail_service.send_results_email(
                 recipient_email=os.getenv('RECIPIENT_EMAIL'),
                 subject=email_subject,
-                body=email_body,
-                attachment_paths=[inclusion_list_path, exclusion_list_path]
+                body=email_body
             )
 
             # Final summary

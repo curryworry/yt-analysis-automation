@@ -209,25 +209,21 @@ class GmailService:
             logger.error(f"Error extracting CSV: {error}")
             raise
 
-    def send_results_email(self, recipient_email, subject, body, attachment_paths):
+    def send_results_email(self, recipient_email, subject, body, attachment_paths=None):
         """
-        Send results email with multiple CSV attachments
+        Send results email with optional CSV attachments
 
         Args:
             recipient_email: Email address to send to
             subject: Email subject
             body: Email body text (HTML supported)
-            attachment_paths: List of paths to CSV files to attach, or single path
+            attachment_paths: Optional list of paths to CSV files to attach, or single path
         """
         try:
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
             from email.mime.base import MIMEBase
             from email import encoders
-
-            # Ensure attachment_paths is a list
-            if isinstance(attachment_paths, str):
-                attachment_paths = [attachment_paths]
 
             # Create message
             message = MIMEMultipart()
@@ -237,22 +233,27 @@ class GmailService:
             # Add body (support HTML)
             message.attach(MIMEText(body, 'html'))
 
-            # Add attachments
-            for attachment_path in attachment_paths:
-                if os.path.exists(attachment_path):
-                    with open(attachment_path, 'rb') as f:
-                        part = MIMEBase('application', 'octet-stream')
-                        part.set_payload(f.read())
+            # Add attachments if provided
+            if attachment_paths:
+                # Ensure attachment_paths is a list
+                if isinstance(attachment_paths, str):
+                    attachment_paths = [attachment_paths]
 
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        'Content-Disposition',
-                        f'attachment; filename={os.path.basename(attachment_path)}'
-                    )
-                    message.attach(part)
-                    logger.info(f"Attached: {os.path.basename(attachment_path)}")
-                else:
-                    logger.warning(f"Attachment not found: {attachment_path}")
+                for attachment_path in attachment_paths:
+                    if os.path.exists(attachment_path):
+                        with open(attachment_path, 'rb') as f:
+                            part = MIMEBase('application', 'octet-stream')
+                            part.set_payload(f.read())
+
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename={os.path.basename(attachment_path)}'
+                        )
+                        message.attach(part)
+                        logger.info(f"Attached: {os.path.basename(attachment_path)}")
+                    else:
+                        logger.warning(f"Attachment not found: {attachment_path}")
 
             # Send message
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
@@ -263,7 +264,8 @@ class GmailService:
                 body=send_message
             ).execute()
 
-            logger.info(f"Results email sent to {recipient_email} with {len(attachment_paths)} attachment(s)")
+            attachment_count = len(attachment_paths) if attachment_paths else 0
+            logger.info(f"Results email sent to {recipient_email} with {attachment_count} attachment(s)")
 
         except Exception as error:
             logger.error(f"Error sending email: {error}")

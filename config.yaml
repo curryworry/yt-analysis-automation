@@ -71,21 +71,31 @@ email:
         <li><strong>Processing time:</strong> {processing_time}</li>
       </ul>
 
-      <h3 style="color: #27ae60;">Attached Files</h3>
-      <p>This email contains <strong>two CSV files</strong>:</p>
-
-      <div style="background-color: #fee; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0;">
-        <h4 style="margin-top: 0; color: #e74c3c;">Inclusion List (SAFE Channels)</h4>
-        <p><strong>File:</strong> <code>inclusion_list_safe_channels_{date}.csv</code></p>
-        <p>Contains <strong>{flagged_count} channels</strong> identified as children's content that should be <strong>BLOCKED</strong> from DV360 campaigns.</p>
-        <p><em>Use this list to exclude these channels from your ad placements.</em></p>
-      </div>
+      <h3 style="color: #27ae60;">Download CSV Files</h3>
+      <p>The analysis results are available as <strong>two CSV files</strong> stored in Cloud Storage. Click the links below to download (links expire in 7 days):</p>
 
       <div style="background-color: #efe; padding: 15px; border-left: 4px solid #27ae60; margin: 15px 0;">
-        <h4 style="margin-top: 0; color: #27ae60;">Exclusion List (BLOCK These Channels)</h4>
-        <p><strong>File:</strong> <code>exclusion_list_children_channels_{date}.csv</code></p>
+        <h4 style="margin-top: 0; color: #27ae60;">1. Inclusion List (SAFE Channels)</h4>
+        <p><strong>File:</strong> <code>inclusion_list_safe_channels_{date}.csv</code></p>
         <p>Contains <strong>{safe_count} channels</strong> that are <strong>NOT</strong> children's content and are safe for advertising.</p>
         <p><em>These channels passed the analysis and do not target children.</em></p>
+        <p style="margin-top: 15px;">
+          <a href="{inclusion_url}" style="display: inline-block; padding: 10px 20px; background-color: #27ae60; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            Download Inclusion List
+          </a>
+        </p>
+      </div>
+
+      <div style="background-color: #fee; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0;">
+        <h4 style="margin-top: 0; color: #e74c3c;">2. Exclusion List (BLOCK These Channels)</h4>
+        <p><strong>File:</strong> <code>exclusion_list_children_channels_{date}.csv</code></p>
+        <p>Contains <strong>{flagged_count} channels</strong> identified as children's content that should be <strong>BLOCKED</strong> from DV360 campaigns.</p>
+        <p><em>Use this list to exclude these channels from your ad placements.</em></p>
+        <p style="margin-top: 15px;">
+          <a href="{exclusion_url}" style="display: inline-block; padding: 10px 20px; background-color: #e74c3c; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            Download Exclusion List
+          </a>
+        </p>
       </div>
 
       <h3 style="color: #3498db;">Caching & Cost Savings</h3>
