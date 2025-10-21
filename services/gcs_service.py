@@ -2,6 +2,8 @@ import os
 import logging
 from google.cloud import storage
 from datetime import timedelta
+from google.auth import compute_engine
+from google.auth.transport import requests as auth_requests
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +59,15 @@ class GCSService:
         try:
             blob = self.bucket.blob(blob_name)
 
-            # Generate signed URL that expires in specified hours
+            # Use service account email for signing (compute engine credentials don't have private key)
+            # This uses IAM signBlob API instead of local signing
+            service_account_email = os.getenv('SERVICE_ACCOUNT_EMAIL', '530556935513-compute@developer.gserviceaccount.com')
+
             url = blob.generate_signed_url(
                 version="v4",
                 expiration=timedelta(hours=expiration_hours),
-                method="GET"
+                method="GET",
+                service_account_email=service_account_email
             )
 
             logger.info(f"Generated signed URL for {blob_name} (expires in {expiration_hours} hours)")

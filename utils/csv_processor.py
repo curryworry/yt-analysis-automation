@@ -50,7 +50,12 @@ class CSVProcessor:
 
                 reader = csv.DictReader(f, dialect=dialect)
 
+                # Log column names for debugging
+                first_row = True
                 for row in reader:
+                    if first_row:
+                        logger.info(f"CSV column names: {list(row.keys())}")
+                        first_row = False
                     rows.append(row)
                     self.total_rows += 1
 
@@ -81,7 +86,8 @@ class CSVProcessor:
 
         try:
             for row in rows:
-                placement = row.get('Placement', '').strip()
+                # Handle both old and new DV360 CSV column formats
+                placement = row.get('Placement (All YouTube Channels)', row.get('Placement', '')).strip()
 
                 # Check if this is a YouTube channel placement
                 if not placement or 'youtube.com' not in placement.lower():
@@ -95,7 +101,7 @@ class CSVProcessor:
                 # Aggregate data for this channel
                 impressions = self._parse_impressions(row.get('Impressions', '0'))
 
-                channel_data[channel_url]['placement_name'] = row.get('Placement Name', '')
+                channel_data[channel_url]['placement_name'] = row.get('Placement Name (All YouTube Channels)', row.get('Placement Name', ''))
                 channel_data[channel_url]['impressions'] += impressions
                 channel_data[channel_url]['advertisers'].add(row.get('Advertiser', 'Unknown'))
                 channel_data[channel_url]['insertion_orders'].add(row.get('Insertion Order', 'Unknown'))

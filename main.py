@@ -223,6 +223,7 @@ def process_dv360_report(request=None):
             logger.info(f"New channels needing OpenAI analysis: {len(channels_to_analyze)}")
 
             # Step 7: Fetch YouTube metadata for new channels
+            quota_exceeded = False
             if channels_to_analyze:
                 logger.info("\n" + "=" * 80)
                 logger.info(f"STEP 7: Fetching YouTube metadata for {len(channels_to_analyze)} new channels")
@@ -233,12 +234,23 @@ def process_dv360_report(request=None):
                 for i, channel_url in enumerate(channels_to_analyze):
                     logger.info(f"Fetching metadata {i + 1}/{len(channels_to_analyze)}: {channel_url}")
 
-                    metadata = youtube_service.get_channel_metadata(channel_url)
+                    try:
+                        metadata = youtube_service.get_channel_metadata(channel_url)
 
-                    if metadata:
-                        channels_metadata.append(metadata)
-                    else:
-                        logger.warning(f"Could not fetch metadata for: {channel_url}")
+                        if metadata:
+                            channels_metadata.append(metadata)
+                        else:
+                            logger.warning(f"Could not fetch metadata for: {channel_url}")
+                    except Exception as e:
+                        # Check if it's a quota error
+                        if 'quota' in str(e).lower():
+                            logger.warning(f"YouTube API quota exceeded after processing {i} channels")
+                            logger.info(f"Successfully fetched metadata for {len(channels_metadata)} channels before quota limit")
+                            quota_exceeded = True
+                            break
+                        else:
+                            logger.error(f"Error fetching metadata for {channel_url}: {e}")
+                            continue
 
                 # Step 8: Categorize channels with OpenAI
                 logger.info("\n" + "=" * 80)
@@ -368,7 +380,17 @@ def process_dv360_report(request=None):
 
             processing_time = (datetime.now() - start_time).total_seconds()
 
-            email_subject = config.get('email', {}).get('subject', 'DV360 Children\'s Channel Analysis Results').format(
+            # Add partial results warning if quota was exceeded
+            partial_warning = ""
+            if quota_exceeded:
+                unprocessed_count = len(channels_to_analyze) - len([r for r in final_results if not r.get('cached')])
+                partial_warning = f"<div style='background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0;'><strong>⚠️ Partial Results:</strong> YouTube API quota exceeded. {unprocessed_count} channels were not processed and will be analyzed in the next run.</div>"
+
+            email_subject_template = config.get('email', {}).get('subject', 'DV360 Children\'s Channel Analysis Results')
+            if quota_exceeded:
+                email_subject_template += " [PARTIAL]"
+
+            email_subject = email_subject_template.format(
                 date=datetime.now().strftime('%Y-%m-%d')
             )
 
@@ -381,7 +403,8 @@ def process_dv360_report(request=None):
                 processing_time=f"{processing_time:.2f} seconds",
                 date=date_str,
                 inclusion_url=inclusion_url,
-                exclusion_url=exclusion_url
+                exclusion_url=exclusion_url,
+                partial_warning=partial_warning
             )
 
             gmail_service.send_results_email(

@@ -61,6 +61,8 @@ email:
 
       <p>The automated analysis of YouTube channels from the DV360 placement report has completed successfully.</p>
 
+      {partial_warning}
+
       <h3 style="color: #e74c3c;">Summary Statistics</h3>
       <ul>
         <li><strong>Total channels analyzed:</strong> {total_channels}</li>

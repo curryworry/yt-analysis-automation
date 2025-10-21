@@ -149,8 +149,9 @@ class YouTubeService:
 
                 channel_data = response['items'][0]
 
-                # Get recent video titles for better analysis
-                recent_titles = self.get_recent_video_titles(channel_id, max_results=5)
+                # Skip fetching recent video titles to save quota (costs 100 units per call)
+                # Channel name and description are usually sufficient for analysis
+                recent_titles = []
 
                 # Extract relevant metadata
                 metadata = {
