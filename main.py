@@ -355,21 +355,33 @@ def process_dv360_report(request=None):
             logger.info("STEP 11: Uploading CSVs to Cloud Storage")
             logger.info("=" * 80)
 
-            # Upload inclusion list
-            inclusion_blob_name = f'dv360-reports/{date_str}/inclusion_list_safe_channels_{date_str}.csv'
+            # Upload inclusion list to both dated archive and latest location
+            # Archive copy with date
+            inclusion_archive_blob = f'dv360-reports/archive/{date_str}/inclusion_list_safe_channels_{date_str}.csv'
+            gcs_service.upload_file(inclusion_list_path, inclusion_archive_blob)
+            logger.info(f"✓ Archived inclusion list to: gs://{gcs_service.bucket_name}/{inclusion_archive_blob}")
+
+            # Latest copy with fixed name and long-lived signed URL
+            inclusion_blob_name = 'dv360-reports/latest/inclusion_list_safe_channels.csv'
             inclusion_gcs_uri, inclusion_url = gcs_service.upload_and_get_url(
                 inclusion_list_path,
                 inclusion_blob_name,
-                expiration_hours=168  # 7 days
+                expiration_hours=720  # 30 days
             )
             logger.info(f"✓ Uploaded inclusion list to: {inclusion_gcs_uri}")
 
-            # Upload exclusion list
-            exclusion_blob_name = f'dv360-reports/{date_str}/exclusion_list_children_channels_{date_str}.csv'
+            # Upload exclusion list to both dated archive and latest location
+            # Archive copy with date
+            exclusion_archive_blob = f'dv360-reports/archive/{date_str}/exclusion_list_children_channels_{date_str}.csv'
+            gcs_service.upload_file(exclusion_list_path, exclusion_archive_blob)
+            logger.info(f"✓ Archived exclusion list to: gs://{gcs_service.bucket_name}/{exclusion_archive_blob}")
+
+            # Latest copy with fixed name and long-lived signed URL
+            exclusion_blob_name = 'dv360-reports/latest/exclusion_list_children_channels.csv'
             exclusion_gcs_uri, exclusion_url = gcs_service.upload_and_get_url(
                 exclusion_list_path,
                 exclusion_blob_name,
-                expiration_hours=168  # 7 days
+                expiration_hours=720  # 30 days
             )
             logger.info(f"✓ Uploaded exclusion list to: {exclusion_gcs_uri}")
 
