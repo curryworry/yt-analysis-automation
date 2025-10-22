@@ -257,7 +257,17 @@ def process_dv360_report(request=None):
                 logger.info(f"STEP 8: Categorizing {len(channels_metadata)} channels with OpenAI")
                 logger.info("=" * 80)
 
-                categorization_results = openai_service.batch_categorize_channels(channels_metadata)
+                try:
+                    categorization_results = openai_service.batch_categorize_channels(channels_metadata)
+                except Exception as e:
+                    # Check if it's a quota error
+                    if 'quota' in str(e).lower() or 'billing' in str(e).lower():
+                        logger.warning(f"OpenAI quota exceeded during categorization")
+                        logger.info(f"Successfully categorized {len([r for r in final_results if not r.get('cached')])} channels before quota limit")
+                        quota_exceeded = True
+                        categorization_results = []  # Empty results, won't save bad data
+                    else:
+                        raise
 
                 # Step 9: Save results to Firestore
                 logger.info("\n" + "=" * 80)
@@ -396,7 +406,7 @@ def process_dv360_report(request=None):
             partial_warning = ""
             if quota_exceeded:
                 unprocessed_count = len(channels_to_analyze) - len([r for r in final_results if not r.get('cached')])
-                partial_warning = f"<div style='background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0;'><strong>⚠️ Partial Results:</strong> YouTube API quota exceeded. {unprocessed_count} channels were not processed and will be analyzed in the next run.</div>"
+                partial_warning = f"<div style='background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0;'><strong>⚠️ Partial Results:</strong> API quota exceeded (YouTube or OpenAI). {unprocessed_count} channels were not processed and will be analyzed in the next run. Only successfully analyzed channels are included in the lists below.</div>"
 
             email_subject_template = config.get('email', {}).get('subject', 'DV360 Children\'s Channel Analysis Results')
             if quota_exceeded:

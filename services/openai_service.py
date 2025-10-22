@@ -123,6 +123,13 @@ Example response:
                 time.sleep(2 ** retry_count)
 
             except requests.exceptions.RequestException as error:
+                error_msg = str(error).lower()
+
+                # Check for quota/billing errors
+                if 'quota' in error_msg or 'insufficient_quota' in error_msg or 'billing' in error_msg or 'rate_limit' in error_msg:
+                    logger.error(f"OpenAI quota/billing error: {error}")
+                    raise Exception(f"OpenAI quota exceeded: {error}")
+
                 logger.error(f"Error calling OpenAI API (attempt {retry_count + 1}/{max_retries}): {error}")
                 retry_count += 1
 
