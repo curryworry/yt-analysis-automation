@@ -2,8 +2,7 @@ import os
 import logging
 from google.cloud import storage
 from datetime import timedelta
-from google.auth import compute_engine
-from google.auth.transport import requests as auth_requests
+import datetime as dt
 
 logger = logging.getLogger(__name__)
 
@@ -47,34 +46,65 @@ class GCSService:
 
     def get_signed_url(self, blob_name, expiration_hours=168):
         """
-        Generate a signed URL for downloading a blob.
+        Generate a signed URL for downloading the blob.
+        Uses IAM-based signing for Cloud Functions (no private key needed).
 
         Args:
             blob_name: Name of the blob in GCS
-            expiration_hours: How long the URL should be valid (default: 168 hours = 7 days)
+            expiration_hours: How many hours the URL should be valid (default: 168 = 7 days)
 
         Returns:
             str: Signed URL for downloading the file
         """
         try:
+            import google.auth
+            from google.auth.transport import requests as google_requests
+            from google.auth import impersonated_credentials
+            import google.auth.credentials
+
             blob = self.bucket.blob(blob_name)
 
-            # Use service account email for signing (compute engine credentials don't have private key)
-            # This uses IAM signBlob API instead of local signing
-            service_account_email = os.getenv('SERVICE_ACCOUNT_EMAIL', '530556935513-compute@developer.gserviceaccount.com')
+            # Get default credentials
+            credentials, project = google.auth.default()
 
-            url = blob.generate_signed_url(
+            # Get service account email from metadata
+            import requests
+            try:
+                response = requests.get(
+                    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email',
+                    headers={'Metadata-Flavor': 'Google'},
+                    timeout=5
+                )
+                service_account_email = response.text.strip()
+                logger.info(f"Using service account for signing: {service_account_email}")
+            except Exception as e:
+                logger.error(f"Could not get service account email: {e}")
+                raise
+
+            # Create impersonated credentials that use IAM signBlob
+            # This allows signing without having the private key
+            signing_credentials = impersonated_credentials.Credentials(
+                source_credentials=credentials,
+                target_principal=service_account_email,
+                target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
+                delegates=[],
+                lifetime=3600  # Token lifetime
+            )
+
+            # Generate signed URL with impersonated credentials
+            signed_url = blob.generate_signed_url(
                 version="v4",
                 expiration=timedelta(hours=expiration_hours),
                 method="GET",
-                service_account_email=service_account_email
+                credentials=signing_credentials
             )
 
             logger.info(f"Generated signed URL for {blob_name} (expires in {expiration_hours} hours)")
-            return url
+            return signed_url
 
         except Exception as e:
-            logger.error(f"Failed to generate signed URL for {blob_name}: {str(e)}")
+            logger.error(f"Failed to generate signed URL: {str(e)}")
+            logger.error("Make sure the service account has 'roles/iam.serviceAccountTokenCreator' role on itself")
             raise
 
     def upload_and_get_url(self, local_file_path, destination_blob_name, expiration_hours=168):
@@ -84,7 +114,7 @@ class GCSService:
         Args:
             local_file_path: Path to the local file
             destination_blob_name: Name of the blob in GCS (path in bucket)
-            expiration_hours: How long the URL should be valid (default: 168 hours = 7 days)
+            expiration_hours: How many hours the URL should be valid (default: 168 = 7 days)
 
         Returns:
             tuple: (gcs_uri, signed_url)
