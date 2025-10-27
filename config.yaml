@@ -40,26 +40,69 @@ processing:
 # OpenAI Categorization Prompt Template
 openai:
   system_prompt: |
-    You are an expert at analyzing YouTube channels to determine if they primarily target children.
-    Consider factors like: content themes, language complexity, visual style, and target audience.
+    You are an expert YouTube channel analyst specializing in advertising targeting and brand safety.
+    Analyze channels for: children's content (COPPA compliance), content category, brand safety, and purchase intent.
+    Use ONLY the provided metadata. Do not invent information. Be precise and objective.
 
   user_prompt_template: |
-    Analyze this YouTube channel and determine if it primarily targets children (under 13):
+    Analyze this YouTube channel for advertising purposes:
 
     Channel Name: {channel_name}
-    Description: {description}
-    Custom URL: {custom_url}
-    Subscriber Count: {subscriber_count}
-    Video Count: {video_count}
-    Recent Video Titles: {recent_titles}
+    Channel Description: {description}
+    Keywords: {keywords}
+    Country: {country}
+    Subscribers: {subscriber_count}
+    Total Videos: {video_count}
+    Total Views: {view_count}
+    Channel Created: {published_at}
 
-    Respond with a JSON object containing:
-    - "is_children_content": true/false
-    - "confidence": "high"/"medium"/"low"
-    - "reasoning": brief explanation (1-2 sentences)
+    Recent Videos (last 5):
+    {recent_videos}
 
-    Example response:
-    {{"is_children_content": true, "confidence": "high", "reasoning": "Channel features nursery rhymes and animations clearly targeting toddlers and preschoolers."}}
+    Provide comprehensive analysis as JSON:
+    {{
+      "compliance": {{
+        "is_children_content": true/false,
+        "confidence": "high"/"medium"/"low",
+        "reasoning": "Brief explanation for children's content determination"
+      }},
+      "content": {{
+        "primary_vertical": "Gaming|Beauty|Tech|Finance|Education|Entertainment|Health|Lifestyle|News|Sports|Music|Other",
+        "sub_niche": "specific niche description (e.g., 'Budget Tech Reviews', 'Makeup Tutorials')",
+        "format": "Tutorial|Review|Vlog|Commentary|Entertainment|Educational|News|Gaming",
+        "confidence": "high|medium|low"
+      }},
+      "brand_safety": {{
+        "overall_score": "safe|moderate|risky",
+        "controversial_topics": true/false,
+        "premium_suitable": true/false,
+        "flags": ["list specific concerns if any, empty array if none"]
+      }},
+      "targeting": {{
+        "geographic_focus": "local|regional|global",
+        "primary_language": "en|es|fr|hi|ja|de|pt|other",
+        "purchase_intent": "high|medium|low"
+      }},
+      "summary": "2-3 sentence summary of key findings for ad targeting"
+    }}
+
+    Example 1 - Children's content (EXCLUDE from campaigns):
+    {{
+      "compliance": {{"is_children_content": true, "confidence": "high", "reasoning": "Channel features nursery rhymes and animations clearly targeting toddlers"}},
+      "content": {{"primary_vertical": "Entertainment", "sub_niche": "Children's Educational Content", "format": "Educational", "confidence": "high"}},
+      "brand_safety": {{"overall_score": "risky", "controversial_topics": false, "premium_suitable": false, "flags": ["COPPA compliance required - children's content"]}},
+      "targeting": {{"geographic_focus": "global", "primary_language": "en", "purchase_intent": "low"}},
+      "summary": "Children's content targeting preschoolers. EXCLUDE from ad campaigns to avoid COPPA violations and wasted spend on non-converting audiences."
+    }}
+
+    Example 2 - Safe tech content (INCLUDE in campaigns):
+    {{
+      "compliance": {{"is_children_content": false, "confidence": "high", "reasoning": "Tech reviews for adult enthusiasts with advanced technical language"}},
+      "content": {{"primary_vertical": "Tech", "sub_niche": "Consumer Electronics Reviews", "format": "Review", "confidence": "high"}},
+      "brand_safety": {{"overall_score": "safe", "controversial_topics": false, "premium_suitable": true, "flags": []}},
+      "targeting": {{"geographic_focus": "global", "primary_language": "en", "purchase_intent": "high"}},
+      "summary": "Tech review channel with high purchase intent. Safe for premium advertisers. Target for electronics, gadgets, and tech service campaigns."
+    }}
 
 # Email Configuration
 email:

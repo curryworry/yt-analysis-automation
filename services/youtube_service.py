@@ -133,9 +133,9 @@ class YouTubeService:
                     logger.error(f"Unknown channel type for URL: {channel_url}")
                     return None
 
-                # Fetch channel details
+                # Fetch channel details (including contentDetails for uploads playlist)
                 request = self.service.channels().list(
-                    part='snippet,statistics,brandingSettings',
+                    part='snippet,statistics,brandingSettings,contentDetails',
                     id=channel_id
                 )
                 response = request.execute()
@@ -149,9 +149,8 @@ class YouTubeService:
 
                 channel_data = response['items'][0]
 
-                # Skip fetching recent video titles to save quota (costs 100 units per call)
-                # Channel name and description are usually sufficient for analysis
-                recent_titles = []
+                # Fetch recent videos efficiently using uploads playlist (only 3 quota units!)
+                recent_videos = self.get_recent_videos_from_playlist(channel_data, max_results=5)
 
                 # Extract relevant metadata
                 metadata = {
@@ -165,7 +164,7 @@ class YouTubeService:
                     'published_at': channel_data['snippet'].get('publishedAt', ''),
                     'country': channel_data['snippet'].get('country', ''),
                     'keywords': channel_data.get('brandingSettings', {}).get('channel', {}).get('keywords', ''),
-                    'recent_video_titles': recent_titles,
+                    'recent_videos': recent_videos,
                     'channel_url': f"https://www.youtube.com/channel/{channel_id}"
                 }
 
@@ -190,6 +189,58 @@ class YouTubeService:
                 time.sleep(2 ** retry_count)
 
         return None
+
+    def get_recent_videos_from_playlist(self, channel_data, max_results=5):
+        """
+        Efficiently fetch recent videos using the channel's uploads playlist
+        This method costs only 3 quota units (vs 100 for search)
+
+        Args:
+            channel_data: Channel data from channels().list() response
+            max_results: Number of recent videos to fetch
+
+        Returns:
+            list: List of dicts containing video metadata (title, description, published_at, tags)
+        """
+        try:
+            # Get the uploads playlist ID from channel data
+            uploads_playlist_id = channel_data.get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads')
+
+            if not uploads_playlist_id:
+                logger.warning(f"No uploads playlist found for channel")
+                return []
+
+            # Fetch recent videos from uploads playlist (only 3 quota units!)
+            request = self.service.playlistItems().list(
+                part='snippet',
+                playlistId=uploads_playlist_id,
+                maxResults=max_results
+            )
+            response = request.execute()
+
+            self.api_calls_made += 1
+            time.sleep(self.rate_limit_delay)
+
+            videos = []
+            for item in response.get('items', []):
+                snippet = item.get('snippet', {})
+                videos.append({
+                    'video_id': snippet.get('resourceId', {}).get('videoId', ''),
+                    'title': snippet.get('title', ''),
+                    'description': snippet.get('description', ''),
+                    'published_at': snippet.get('publishedAt', ''),
+                    'tags': snippet.get('tags', [])
+                })
+
+            logger.debug(f"Fetched {len(videos)} recent videos from uploads playlist")
+            return videos
+
+        except HttpError as error:
+            logger.warning(f"Error fetching recent videos from playlist: {error}")
+            return []
+        except Exception as error:
+            logger.warning(f"Unexpected error fetching recent videos: {error}")
+            return []
 
     def get_recent_video_titles(self, channel_id, max_results=5):
         """

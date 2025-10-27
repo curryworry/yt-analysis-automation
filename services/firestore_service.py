@@ -155,16 +155,31 @@ class FirestoreService:
                     save_data = {
                         'channel_url': data['channel_url'],
                         'channel_name': data['channel_name'],
-                        'is_children_content': data['is_children_content'],
-                        'confidence': data['confidence'],
-                        'reasoning': data['reasoning'],
+                        # Compliance (backward compatible)
+                        'is_children_content': data.get('is_children_content', False),
+                        'confidence': data.get('confidence', 'low'),
+                        'reasoning': data.get('reasoning', ''),
+                        # Enhanced targeting data (optional, won't break if missing)
+                        'content_vertical': data.get('content_vertical', ''),
+                        'content_niche': data.get('content_niche', ''),
+                        'content_format': data.get('content_format', ''),
+                        'brand_safety_score': data.get('brand_safety_score', ''),
+                        'premium_suitable': data.get('premium_suitable', True),
+                        'geographic_focus': data.get('geographic_focus', ''),
+                        'primary_language': data.get('primary_language', ''),
+                        'purchase_intent': data.get('purchase_intent', ''),
+                        'summary': data.get('summary', ''),
                         'created_at': firestore.SERVER_TIMESTAMP,
                         'updated_at': firestore.SERVER_TIMESTAMP,
-                        'version': '1.0'
+                        'version': '2.0'  # Updated version for enhanced data
                     }
 
                     if 'metadata' in data:
                         save_data['metadata'] = data['metadata']
+
+                    # Store full analysis if available
+                    if 'full_analysis' in data:
+                        save_data['full_analysis'] = data['full_analysis']
 
                     batch.set(doc_ref, save_data)
 

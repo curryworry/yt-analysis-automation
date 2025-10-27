@@ -48,6 +48,27 @@ Respond with a JSON object containing:
 Example response:
 {{"is_children_content": true, "confidence": "high", "reasoning": "Channel features nursery rhymes and animations clearly targeting toddlers and preschoolers."}}"""
 
+    def format_recent_videos(self, recent_videos):
+        """
+        Format recent videos data for the prompt
+
+        Args:
+            recent_videos: List of video dicts with title, description, published_at
+
+        Returns:
+            str: Formatted string of recent videos
+        """
+        if not recent_videos:
+            return "No recent videos available"
+
+        formatted = []
+        for i, video in enumerate(recent_videos[:5], 1):
+            title = video.get('title', 'No title')
+            description = video.get('description', '')[:200]  # Limit description length
+            formatted.append(f"{i}. Title: {title}\n   Description: {description}")
+
+        return '\n'.join(formatted)
+
     def categorize_channel(self, channel_metadata, max_retries=3):
         """
         Categorize a YouTube channel using OpenAI REST API
@@ -57,20 +78,28 @@ Example response:
             max_retries: Maximum number of retry attempts
 
         Returns:
-            dict: Categorization result with is_children_content, confidence, reasoning
+            dict: Categorization result with enhanced targeting data
         """
         retry_count = 0
 
         while retry_count < max_retries:
             try:
+                # Format recent videos
+                recent_videos_formatted = self.format_recent_videos(
+                    channel_metadata.get('recent_videos', [])
+                )
+
                 # Prepare prompt with channel data
                 user_prompt = self.user_prompt_template.format(
                     channel_name=channel_metadata.get('channel_name', 'Unknown'),
-                    description=channel_metadata.get('description', 'No description')[:500],  # Limit length
-                    custom_url=channel_metadata.get('custom_url', 'N/A'),
+                    description=channel_metadata.get('description', 'No description')[:1000],  # Increased limit
+                    keywords=channel_metadata.get('keywords', 'None'),
+                    country=channel_metadata.get('country', 'Unknown'),
                     subscriber_count=channel_metadata.get('subscriber_count', '0'),
                     video_count=channel_metadata.get('video_count', '0'),
-                    recent_titles=', '.join(channel_metadata.get('recent_video_titles', [])[:5])
+                    view_count=channel_metadata.get('view_count', '0'),
+                    published_at=channel_metadata.get('published_at', 'Unknown'),
+                    recent_videos=recent_videos_formatted
                 )
 
                 # Prepare request payload
@@ -105,17 +134,52 @@ Example response:
                 result_text = response_data['choices'][0]['message']['content']
                 result = json.loads(result_text)
 
-                # Validate result format
-                if not all(k in result for k in ['is_children_content', 'confidence', 'reasoning']):
-                    logger.warning(f"Invalid response format: {result_text}")
+                # Validate result format (new enhanced format)
+                required_sections = ['compliance', 'content', 'brand_safety', 'targeting', 'summary']
+                if not all(k in result for k in required_sections):
+                    logger.warning(f"Invalid response format, missing sections: {result_text[:200]}")
                     retry_count += 1
                     continue
 
-                logger.info(f"Categorized channel: {channel_metadata.get('channel_name')} - "
-                          f"Children's content: {result['is_children_content']}, "
-                          f"Confidence: {result['confidence']}")
+                # Extract key values for backward compatibility
+                compliance = result.get('compliance', {})
+                content = result.get('content', {})
+                brand_safety = result.get('brand_safety', {})
 
-                return result
+                # Create flattened result for easier use
+                flattened_result = {
+                    # Compliance (backward compatible)
+                    'is_children_content': compliance.get('is_children_content', False),
+                    'confidence': compliance.get('confidence', 'low'),
+                    'reasoning': compliance.get('reasoning', ''),
+
+                    # Enhanced targeting data
+                    'content_vertical': content.get('primary_vertical', 'Other'),
+                    'content_niche': content.get('sub_niche', ''),
+                    'content_format': content.get('format', ''),
+                    'content_confidence': content.get('confidence', 'low'),
+
+                    'brand_safety_score': brand_safety.get('overall_score', 'moderate'),
+                    'controversial_topics': brand_safety.get('controversial_topics', False),
+                    'premium_suitable': brand_safety.get('premium_suitable', True),
+                    'safety_flags': brand_safety.get('flags', []),
+
+                    'geographic_focus': result.get('targeting', {}).get('geographic_focus', 'unknown'),
+                    'primary_language': result.get('targeting', {}).get('primary_language', 'unknown'),
+                    'purchase_intent': result.get('targeting', {}).get('purchase_intent', 'unknown'),
+
+                    'summary': result.get('summary', ''),
+
+                    # Keep full result for reference
+                    'full_analysis': result
+                }
+
+                logger.info(f"Categorized channel: {channel_metadata.get('channel_name')} - "
+                          f"Children's content: {flattened_result['is_children_content']}, "
+                          f"Vertical: {flattened_result['content_vertical']}, "
+                          f"Safety: {flattened_result['brand_safety_score']}")
+
+                return flattened_result
 
             except json.JSONDecodeError as error:
                 logger.error(f"Error parsing OpenAI response: {error}")
