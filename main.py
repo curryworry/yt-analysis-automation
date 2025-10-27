@@ -311,10 +311,19 @@ def process_dv360_report(request=None):
                 for auto_flag in auto_flagged_new:
                     channel_url = auto_flag['channel_url']
 
-                    # Fetch basic channel name from YouTube
-                    metadata = youtube_service.get_channel_metadata(channel_url)
-
-                    channel_name = metadata['channel_name'] if metadata else auto_flag['placement_name']
+                    # Fetch basic channel name from YouTube (with quota protection)
+                    try:
+                        metadata = youtube_service.get_channel_metadata(channel_url)
+                        channel_name = metadata['channel_name'] if metadata else auto_flag['placement_name']
+                    except Exception as e:
+                        if 'quota' in str(e).lower():
+                            logger.warning(f"YouTube API quota exceeded while processing auto-flagged channels")
+                            quota_exceeded = True
+                            # Use placement name as fallback
+                            channel_name = auto_flag['placement_name']
+                        else:
+                            logger.error(f"Error fetching metadata for auto-flagged channel: {e}")
+                            channel_name = auto_flag['placement_name']
 
                     # Add to final results
                     final_results.append({
