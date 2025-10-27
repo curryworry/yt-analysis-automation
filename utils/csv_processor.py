@@ -87,7 +87,7 @@ class CSVProcessor:
         try:
             for row in rows:
                 # Handle both old and new DV360 CSV column formats
-                placement = row.get('Placement (All YouTube Channels)', row.get('Placement', '')).strip()
+                placement = (row.get('Placement (All YouTube Channels)') or row.get('Placement') or '').strip()
 
                 # Check if this is a YouTube channel placement
                 if not placement or 'youtube.com' not in placement.lower():
