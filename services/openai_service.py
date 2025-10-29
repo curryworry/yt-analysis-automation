@@ -8,6 +8,8 @@ import json
 import logging
 import time
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,27 @@ class OpenAIService:
         self.model = model
         self.api_calls_made = 0
         self.api_url = "https://api.openai.com/v1/chat/completions"
+
+        # Create persistent session with retry strategy to handle SSL issues
+        self.session = requests.Session()
+
+        # Configure retry strategy for transient SSL/network errors
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=2,  # 2, 4, 8 seconds
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["POST"],
+            raise_on_status=False  # Let us handle HTTP errors
+        )
+
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=10
+        )
+
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
         self.system_prompt = system_prompt or """You are an expert at analyzing YouTube channels to determine if they primarily target children.
 Consider factors like: content themes, language complexity, visual style, and target audience."""
@@ -118,12 +141,12 @@ Example response:
                     "Content-Type": "application/json"
                 }
 
-                # Call OpenAI REST API
-                response = requests.post(
+                # Call OpenAI REST API using persistent session
+                response = self.session.post(
                     self.api_url,
                     headers=headers,
                     json=payload,
-                    timeout=30
+                    timeout=60  # Increased timeout from 30 to 60 seconds
                 )
 
                 response.raise_for_status()
