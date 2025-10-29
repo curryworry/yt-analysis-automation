@@ -80,7 +80,7 @@ gcloud functions deploy dv360-channel-analyzer \
     --entry-point=process_dv360_report \
     --trigger-http \
     --no-allow-unauthenticated \
-    --timeout=540s \
+    --timeout=3600s \
     --memory=1GB \
     --max-instances=1 \
     --set-env-vars="GCP_PROJECT_ID=$GCP_PROJECT_ID,GCP_BUCKET_NAME=$GCP_BUCKET_NAME,FIRESTORE_COLLECTION=$FIRESTORE_COLLECTION,GMAIL_SUBJECT_FILTER=$GMAIL_SUBJECT_FILTER,RECIPIENT_EMAIL=$RECIPIENT_EMAIL,OPENAI_MODEL=$OPENAI_MODEL,BATCH_SIZE=$BATCH_SIZE,MAX_WORKERS=$MAX_WORKERS,RATE_LIMIT_DELAY=$RATE_LIMIT_DELAY" \
