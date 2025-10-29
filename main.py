@@ -26,6 +26,53 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def process_channel_batch_combined(batch_urls, youtube_service, openai_service, firestore_service):
+    """
+    Process a batch of channels: Fetch YouTube metadata AND do OpenAI categorization
+    Write results immediately to Firestore for natural checkpointing
+
+    Args:
+        batch_urls: List of YouTube channel URLs to process
+        youtube_service: YouTubeService instance
+        openai_service: OpenAIService instance
+        firestore_service: FirestoreService instance
+
+    Returns:
+        list: Categorization results for this batch
+    """
+    results = []
+
+    for channel_url in batch_urls:
+        try:
+            # 1. Fetch YouTube metadata
+            metadata = youtube_service.get_channel_metadata(channel_url)
+
+            if not metadata:
+                logger.warning(f"Could not fetch metadata for: {channel_url}")
+                continue
+
+            # 2. Categorize with OpenAI
+            categorization = openai_service.categorize_channel(metadata)
+
+            # Add channel URL to result
+            categorization['channel_url'] = channel_url
+            categorization['channel_name'] = metadata.get('channel_name')
+
+            results.append(categorization)
+
+            # 3. Save immediately to Firestore (natural checkpoint)
+            firestore_service.batch_save_categories([categorization])
+
+            logger.info(f"Processed {channel_url}: {categorization.get('is_children_content')}")
+
+        except Exception as error:
+            logger.error(f"Error processing {channel_url}: {error}")
+            # Continue with next channel
+            continue
+
+    return results
+
+
 def load_config():
     """Load configuration from config.yaml"""
     try:
@@ -222,88 +269,67 @@ def process_dv360_report(request=None):
             logger.info(f"Auto-flagged (new keyword matches): {len(auto_flagged_new)}")
             logger.info(f"New channels needing OpenAI analysis: {len(channels_to_analyze)}")
 
-            # Step 7: Fetch YouTube metadata for new channels
+            # Step 7: Process uncategorized channels in batches (YouTube + OpenAI combined)
+            # Time-aware processing: stop at 55 minutes
+            MAX_RUNTIME = 55 * 60  # 55 minutes in seconds
+            BATCH_SIZE = 100
             quota_exceeded = False
+
             if channels_to_analyze:
                 logger.info("\n" + "=" * 80)
-                logger.info(f"STEP 7: Fetching YouTube metadata for {len(channels_to_analyze)} new channels")
+                logger.info(f"STEP 7: Processing {len(channels_to_analyze)} uncategorized channels in batches")
+                logger.info(f"Batch size: {BATCH_SIZE}, Max runtime: {MAX_RUNTIME/60} minutes")
                 logger.info("=" * 80)
 
-                channels_metadata = []
+                # Split into batches
+                batches = [channels_to_analyze[i:i+BATCH_SIZE]
+                           for i in range(0, len(channels_to_analyze), BATCH_SIZE)]
 
-                for i, channel_url in enumerate(channels_to_analyze):
-                    logger.info(f"Fetching metadata {i + 1}/{len(channels_to_analyze)}: {channel_url}")
+                processed_results = []
+
+                # Process batches with time awareness
+                for batch_num, batch in enumerate(batches, 1):
+                    # Check if we're approaching timeout
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    if elapsed > MAX_RUNTIME:
+                        logger.warning(f"Approaching timeout at batch {batch_num}/{len(batches)}")
+                        logger.warning(f"Stopping after {elapsed/60:.1f} minutes")
+                        break
+
+                    logger.info(f"Processing batch {batch_num}/{len(batches)} ({len(batch)} channels)")
 
                     try:
-                        metadata = youtube_service.get_channel_metadata(channel_url)
+                        batch_results = process_channel_batch_combined(
+                            batch, youtube_service, openai_service, firestore_service
+                        )
+                        processed_results.extend(batch_results)
 
-                        if metadata:
-                            channels_metadata.append(metadata)
-                        else:
-                            logger.warning(f"Could not fetch metadata for: {channel_url}")
                     except Exception as e:
-                        # Check if it's a quota error
                         if 'quota' in str(e).lower():
-                            logger.warning(f"YouTube API quota exceeded after processing {i} channels")
-                            logger.info(f"Successfully fetched metadata for {len(channels_metadata)} channels before quota limit")
+                            logger.error(f"Quota exceeded at batch {batch_num}")
                             quota_exceeded = True
                             break
                         else:
-                            logger.error(f"Error fetching metadata for {channel_url}: {e}")
+                            logger.error(f"Error in batch {batch_num}: {e}")
                             continue
 
-                # Step 8: Categorize channels with OpenAI
-                logger.info("\n" + "=" * 80)
-                logger.info(f"STEP 8: Categorizing {len(channels_metadata)} channels with OpenAI")
-                logger.info("=" * 80)
-
-                try:
-                    categorization_results = openai_service.batch_categorize_channels(channels_metadata)
-                except Exception as e:
-                    # Check if it's a quota error
-                    if 'quota' in str(e).lower() or 'billing' in str(e).lower():
-                        logger.warning(f"OpenAI quota exceeded during categorization")
-                        logger.info(f"Successfully categorized {len([r for r in final_results if not r.get('cached')])} channels before quota limit")
-                        quota_exceeded = True
-                        categorization_results = []  # Empty results, won't save bad data
-                    else:
-                        raise
-
-                # Step 9: Save results to Firestore
-                logger.info("\n" + "=" * 80)
-                logger.info("STEP 9: Saving categorization results to Firestore")
-                logger.info("=" * 80)
-
-                firestore_save_data = []
-
-                for result in categorization_results:
+                # Add impression data and combine with final results
+                for result in processed_results:
                     channel_url = result['channel_url']
-
-                    # Add impression data
                     if channel_url in needs_analysis:
                         result['impressions'] = needs_analysis[channel_url]['impressions']
                         result['advertisers'] = needs_analysis[channel_url]['advertisers']
                         result['insertion_orders'] = needs_analysis[channel_url]['insertion_orders']
-
                     result['cached'] = False
                     final_results.append(result)
 
-                    # Prepare for Firestore batch save
-                    firestore_save_data.append({
-                        'channel_url': result['channel_url'],
-                        'channel_name': result['channel_name'],
-                        'is_children_content': result['is_children_content'],
-                        'confidence': result['confidence'],
-                        'reasoning': result['reasoning']
-                    })
+                logger.info(f"Processed {len(processed_results)} new channels")
+                logger.info(f"Total results: {len(final_results)} (cached + new)")
 
-                if firestore_save_data:
-                    firestore_service.batch_save_categories(firestore_save_data)
-
-            # Step 9.5: Process auto-flagged keyword-matched channels
+            # Step 8: Process auto-flagged keyword-matched channels
             if auto_flagged_new:
                 logger.info("\n" + "=" * 80)
-                logger.info(f"STEP 9.5: Processing {len(auto_flagged_new)} auto-flagged channels")
+                logger.info(f"STEP 8: Processing {len(auto_flagged_new)} auto-flagged channels")
                 logger.info("=" * 80)
 
                 firestore_auto_flagged = []
@@ -351,9 +377,9 @@ def process_dv360_report(request=None):
                     firestore_service.batch_save_categories(firestore_auto_flagged)
                     logger.info(f"✓ Saved {len(firestore_auto_flagged)} auto-flagged channels to Firestore")
 
-            # Step 10: Generate CSV lists (Inclusion & Exclusion)
+            # Step 9: Generate CSV lists (Inclusion & Exclusion)
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 10: Generating CSV lists")
+            logger.info("STEP 9: Generating CSV lists")
             logger.info("=" * 80)
 
             date_str = datetime.now().strftime("%Y%m%d")
@@ -369,9 +395,9 @@ def process_dv360_report(request=None):
             logger.info(f"✓ Inclusion list (SAFE/INCLUDE): {safe_count} channels")
             logger.info(f"✓ Exclusion list (BLOCK/EXCLUDE): {flagged_count} channels")
 
-            # Step 11: Upload CSVs to Cloud Storage
+            # Step 10: Upload CSVs to Cloud Storage
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 11: Uploading CSVs to Cloud Storage")
+            logger.info("STEP 10: Uploading CSVs to Cloud Storage")
             logger.info("=" * 80)
 
             # Upload inclusion list to both dated archive and latest location
@@ -404,9 +430,9 @@ def process_dv360_report(request=None):
             )
             logger.info(f"✓ Uploaded exclusion list to: {exclusion_gcs_uri}")
 
-            # Step 12: Send results email with download links
+            # Step 11: Send results email with download links
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 12: Sending results email with download links")
+            logger.info("STEP 11: Sending results email with download links")
             logger.info("=" * 80)
 
             processing_time = (datetime.now() - start_time).total_seconds()
