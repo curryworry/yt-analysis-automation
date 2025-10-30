@@ -171,6 +171,7 @@ class FirestoreService:
                         'summary': data.get('summary', ''),
                         'created_at': firestore.SERVER_TIMESTAMP,
                         'updated_at': firestore.SERVER_TIMESTAMP,
+                        'last_analyzed': firestore.SERVER_TIMESTAMP,  # For future TTL implementation
                         'version': '2.0'  # Updated version for enhanced data
                     }
 
