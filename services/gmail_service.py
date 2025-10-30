@@ -218,11 +218,27 @@ class GmailService:
             body: Email body text (HTML supported)
             attachment_paths: Optional list of paths to CSV files to attach, or single path
         """
+        import time
+        import ssl
+
         try:
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
             from email.mime.base import MIMEBase
             from email import encoders
+
+            # Proactively refresh credentials to avoid expiration during send
+            # (especially important for long-running functions)
+            try:
+                if hasattr(self.service, '_http') and hasattr(self.service._http, 'credentials'):
+                    if hasattr(self.service._http.credentials, 'refresh'):
+                        logger.info("Proactively refreshing Gmail credentials before sending email")
+                        from google.auth.transport.requests import Request
+                        self.service._http.credentials.refresh(Request())
+                        logger.info("Credentials refreshed successfully")
+            except Exception as refresh_error:
+                logger.warning(f"Could not proactively refresh credentials: {refresh_error}")
+                # Continue anyway - will try to send
 
             # Create message
             message = MIMEMultipart()
@@ -254,18 +270,39 @@ class GmailService:
                     else:
                         logger.warning(f"Attachment not found: {attachment_path}")
 
-            # Send message
+            # Send message with retry logic for transient SSL errors
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
             send_message = {'raw': raw_message}
 
-            self.service.users().messages().send(
-                userId='me',
-                body=send_message
-            ).execute()
+            max_retries = 3
+            retry_delay = 2
 
-            attachment_count = len(attachment_paths) if attachment_paths else 0
-            logger.info(f"Results email sent to {recipient_email} with {attachment_count} attachment(s)")
+            for attempt in range(max_retries):
+                try:
+                    self.service.users().messages().send(
+                        userId='me',
+                        body=send_message
+                    ).execute()
+
+                    attachment_count = len(attachment_paths) if attachment_paths else 0
+                    logger.info(f"Results email sent to {recipient_email} with {attachment_count} attachment(s)")
+                    return  # Success!
+
+                except ssl.SSLEOFError as ssl_error:
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)
+                        logger.warning(f"SSL error sending email (attempt {attempt + 1}/{max_retries}): {ssl_error}")
+                        logger.info(f"Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Failed to send email after {max_retries} attempts due to SSL error")
+                        raise
+
+                except Exception as send_error:
+                    # Other errors - don't retry, just raise
+                    logger.error(f"Error sending email: {send_error}")
+                    raise
 
         except Exception as error:
-            logger.error(f"Error sending email: {error}")
+            logger.error(f"Error in send_results_email: {error}")
             raise

@@ -464,11 +464,18 @@ def process_dv360_report(request=None):
                 partial_warning=partial_warning
             )
 
-            gmail_service.send_results_email(
-                recipient_email=os.getenv('RECIPIENT_EMAIL'),
-                subject=email_subject,
-                body=email_body
-            )
+            # Send email with graceful degradation (data already saved to Firestore & GCS)
+            try:
+                gmail_service.send_results_email(
+                    recipient_email=os.getenv('RECIPIENT_EMAIL'),
+                    subject=email_subject,
+                    body=email_body
+                )
+            except Exception as email_error:
+                logger.error(f"Failed to send results email: {email_error}")
+                logger.warning("Email delivery failed, but all results are saved to Firestore and Cloud Storage")
+                logger.warning(f"Inclusion list: {inclusion_url}")
+                logger.warning(f"Exclusion list: {exclusion_url}")
 
             # Final summary
             logger.info("\n" + "=" * 80)
