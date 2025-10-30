@@ -378,22 +378,43 @@ def process_dv360_report(request=None):
                     logger.info(f"✓ Saved {len(firestore_auto_flagged)} auto-flagged channels to Firestore")
 
             # Step 9: Generate CSV lists (Inclusion & Exclusion)
+            # IMPORTANT: Use ALL channels from Firestore (cumulative) for DV360 targeting
             logger.info("\n" + "=" * 80)
-            logger.info("STEP 9: Generating CSV lists")
+            logger.info("STEP 9: Generating CSV lists (cumulative from ALL Firestore data)")
             logger.info("=" * 80)
 
             date_str = datetime.now().strftime("%Y%m%d")
 
+            # Fetch ALL channels from Firestore for cumulative lists
+            all_firestore_channels = firestore_service.get_all_channels()
+
+            # Merge current run impressions into Firestore data for channels in this CSV
+            # This ensures current run's impression data is included
+            for result in final_results:
+                channel_url = result.get('channel_url')
+                # Find matching Firestore channel and update impressions if present
+                for fs_channel in all_firestore_channels:
+                    if fs_channel.get('channel_url') == channel_url:
+                        if 'impressions' in result:
+                            fs_channel['impressions'] = result['impressions']
+                        if 'advertisers' in result:
+                            fs_channel['advertisers'] = result['advertisers']
+                        if 'insertion_orders' in result:
+                            fs_channel['insertion_orders'] = result['insertion_orders']
+                        break
+
             # Generate inclusion list (SAFE channels - INCLUDE in campaigns)
             inclusion_list_path = os.path.join(temp_dir, f'inclusion_list_safe_channels_{date_str}.csv')
-            safe_count = csv_processor.create_inclusion_list(final_results, inclusion_list_path)
+            safe_count = csv_processor.create_inclusion_list(all_firestore_channels, inclusion_list_path)
 
             # Generate exclusion list (children's content - EXCLUDE from campaigns)
             exclusion_list_path = os.path.join(temp_dir, f'exclusion_list_children_channels_{date_str}.csv')
-            flagged_count = csv_processor.create_exclusion_list(final_results, exclusion_list_path)
+            flagged_count = csv_processor.create_exclusion_list(all_firestore_channels, exclusion_list_path)
 
-            logger.info(f"✓ Inclusion list (SAFE/INCLUDE): {safe_count} channels")
-            logger.info(f"✓ Exclusion list (BLOCK/EXCLUDE): {flagged_count} channels")
+            logger.info(f"✓ Inclusion list (SAFE/INCLUDE): {safe_count} channels (cumulative)")
+            logger.info(f"✓ Exclusion list (BLOCK/EXCLUDE): {flagged_count} channels (cumulative)")
+            logger.info(f"✓ Current run contributed: {len(final_results)} channels")
+            logger.info(f"✓ Total unique channels in Firestore: {len(all_firestore_channels)}")
 
             # Step 10: Upload CSVs to Cloud Storage
             logger.info("\n" + "=" * 80)

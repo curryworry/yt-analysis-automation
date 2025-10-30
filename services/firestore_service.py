@@ -245,6 +245,32 @@ class FirestoreService:
             'hit_rate_percent': round(hit_rate, 2)
         }
 
+    def get_all_channels(self):
+        """
+        Retrieve all channels from Firestore for cumulative CSV generation
+
+        Returns:
+            list: List of all channel categorization dicts
+        """
+        try:
+            logger.info("Fetching all channels from Firestore for cumulative lists")
+            all_channels = []
+
+            # Fetch all documents from collection
+            docs = self.collection.stream()
+
+            for doc in docs:
+                channel_data = doc.to_dict()
+                if channel_data:
+                    all_channels.append(channel_data)
+
+            logger.info(f"Retrieved {len(all_channels)} total channels from Firestore")
+            return all_channels
+
+        except Exception as error:
+            logger.error(f"Error fetching all channels from Firestore: {error}")
+            raise
+
     def _sanitize_doc_id(self, channel_url):
         """
         Convert channel URL to valid Firestore document ID
