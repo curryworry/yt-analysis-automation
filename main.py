@@ -270,8 +270,8 @@ def process_dv360_report(request=None):
             logger.info(f"New channels needing OpenAI analysis: {len(channels_to_analyze)}")
 
             # Step 7: Process uncategorized channels in batches (YouTube + OpenAI combined)
-            # Time-aware processing: stop at 55 minutes
-            MAX_RUNTIME = 55 * 60  # 55 minutes in seconds
+            # Time-aware processing: stop at 45 minutes
+            MAX_RUNTIME = 45 * 60  # 45 minutes in seconds
             BATCH_SIZE = 100
             quota_exceeded = False
 
@@ -327,14 +327,29 @@ def process_dv360_report(request=None):
                 logger.info(f"Total results: {len(final_results)} (cached + new)")
 
             # Step 8: Process auto-flagged keyword-matched channels
-            if auto_flagged_new:
+            # Check if we have enough time remaining (need at least 10 minutes for CSV/email)
+            elapsed = (datetime.now() - start_time).total_seconds()
+            time_remaining = (MAX_RUNTIME - elapsed) / 60
+
+            if auto_flagged_new and elapsed < (MAX_RUNTIME - 5 * 60):  # Skip if less than 5 min remaining
                 logger.info("\n" + "=" * 80)
                 logger.info(f"STEP 8: Processing {len(auto_flagged_new)} auto-flagged channels")
+                logger.info(f"Time remaining: {time_remaining:.1f} minutes")
                 logger.info("=" * 80)
 
                 firestore_auto_flagged = []
+                processed_count = 0
 
                 for auto_flag in auto_flagged_new:
+                    # Check time limit every 100 channels
+                    if processed_count > 0 and processed_count % 100 == 0:
+                        elapsed = (datetime.now() - start_time).total_seconds()
+                        if elapsed > (MAX_RUNTIME - 5 * 60):  # Stop if less than 5 min remaining
+                            logger.warning(f"Stopping auto-flagged processing after {processed_count}/{len(auto_flagged_new)} channels")
+                            logger.warning(f"Time limit approaching: {elapsed/60:.1f} minutes elapsed")
+                            break
+
+                    processed_count += 1
                     channel_url = auto_flag['channel_url']
 
                     # Fetch basic channel name from YouTube (with quota protection)
@@ -376,6 +391,10 @@ def process_dv360_report(request=None):
                 if firestore_auto_flagged:
                     firestore_service.batch_save_categories(firestore_auto_flagged)
                     logger.info(f"✓ Saved {len(firestore_auto_flagged)} auto-flagged channels to Firestore")
+
+            elif auto_flagged_new and elapsed >= (MAX_RUNTIME - 5 * 60):
+                logger.warning(f"⚠️ Skipping Step 8 (auto-flagged channels) - insufficient time remaining")
+                logger.warning(f"Elapsed: {elapsed/60:.1f} minutes, {len(auto_flagged_new)} channels will be processed in next run")
 
             # Step 9: Generate CSV lists (Inclusion & Exclusion)
             # IMPORTANT: Use ALL channels from Firestore (cumulative) for DV360 targeting
