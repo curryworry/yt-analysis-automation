@@ -1,0 +1,10 @@
+BATCH_SIZE: '100'
+FIRESTORE_COLLECTION: channel_categories
+GCP_BUCKET_NAME: yt-channel-analysis-temp-files
+GCP_PROJECT_ID: yt-channel-analysis-475221
+GMAIL_SUBJECT_FILTER: 'YouTube Placement Check - DV360'
+MAX_WORKERS: '5'
+OPENAI_MODEL: gpt-4o-mini
+RATE_LIMIT_DELAY: '0.2'
+RECIPIENT_EMAIL: 'ashwinacquireonlineemail@gmail.com,ashwin@acquirenz.com,wtp@acquirenz.com'
+LOG_EXECUTION_ID: 'true'
