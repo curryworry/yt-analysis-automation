@@ -294,9 +294,36 @@ class CSVProcessor:
                     'channel_name',
                     'channel_url',
                     'channel_id',
+                    'impressions',
+                    # Top-level Firestore fields
+                    'is_children_content',
                     'confidence',
                     'reasoning',
-                    'impressions'
+                    'content_vertical',
+                    'content_niche',
+                    'content_format',
+                    'brand_safety_score',
+                    'premium_suitable',
+                    'geographic_focus',
+                    'primary_language',
+                    'purchase_intent',
+                    'summary',
+                    # full_analysis.compliance fields
+                    'compliance_confidence',
+                    'compliance_is_children_content',
+                    'compliance_reasoning',
+                    # full_analysis.content fields
+                    'content_confidence',
+                    'content_format_detail',
+                    'content_primary_vertical',
+                    'content_sub_niche',
+                    # full_analysis.brand_safety fields
+                    'brand_safety_controversial_topics',
+                    'brand_safety_first_flag',
+                    'brand_safety_overall_score',
+                    'brand_safety_premium_suitable',
+                    # full_analysis.summary
+                    'full_analysis_summary'
                 ]
 
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -307,13 +334,50 @@ class CSVProcessor:
                     channel_url = result.get('channel_url', '')
                     channel_id = channel_url.split('/')[-1] if '/channel/' in channel_url else ''
 
+                    # Extract nested fields safely with "No data" defaults
+                    full_analysis = result.get('full_analysis', {})
+                    compliance = full_analysis.get('compliance', {}) if isinstance(full_analysis, dict) else {}
+                    content = full_analysis.get('content', {}) if isinstance(full_analysis, dict) else {}
+                    brand_safety = full_analysis.get('brand_safety', {}) if isinstance(full_analysis, dict) else {}
+
+                    # Get first flag from brand_safety.flags array if exists, otherwise "No data"
+                    flags = brand_safety.get('flags', []) if isinstance(brand_safety, dict) else []
+                    first_flag = flags[0] if (flags and len(flags) > 0) else 'No data'
+
                     writer.writerow({
-                        'channel_name': result.get('channel_name', 'Unknown'),
+                        'channel_name': result.get('channel_name', 'No data'),
                         'channel_url': channel_url,
                         'channel_id': channel_id,
-                        'confidence': result.get('confidence', 'unknown'),
-                        'reasoning': result.get('reasoning', ''),
-                        'impressions': result.get('impressions', 0)
+                        'impressions': result.get('impressions', 0),
+                        # Top-level Firestore fields
+                        'is_children_content': result.get('is_children_content', 'No data'),
+                        'confidence': result.get('confidence', 'No data'),
+                        'reasoning': result.get('reasoning', 'No data'),
+                        'content_vertical': result.get('content_vertical', 'No data'),
+                        'content_niche': result.get('content_niche', 'No data'),
+                        'content_format': result.get('content_format', 'No data'),
+                        'brand_safety_score': result.get('brand_safety_score', 'No data'),
+                        'premium_suitable': result.get('premium_suitable', 'No data'),
+                        'geographic_focus': result.get('geographic_focus', 'No data'),
+                        'primary_language': result.get('primary_language', 'No data'),
+                        'purchase_intent': result.get('purchase_intent', 'No data'),
+                        'summary': result.get('summary', 'No data'),
+                        # full_analysis.compliance fields
+                        'compliance_confidence': compliance.get('confidence', 'No data') if isinstance(compliance, dict) else 'No data',
+                        'compliance_is_children_content': compliance.get('is_children_content', 'No data') if isinstance(compliance, dict) else 'No data',
+                        'compliance_reasoning': compliance.get('reasoning', 'No data') if isinstance(compliance, dict) else 'No data',
+                        # full_analysis.content fields
+                        'content_confidence': content.get('confidence', 'No data') if isinstance(content, dict) else 'No data',
+                        'content_format_detail': content.get('format', 'No data') if isinstance(content, dict) else 'No data',
+                        'content_primary_vertical': content.get('primary_vertical', 'No data') if isinstance(content, dict) else 'No data',
+                        'content_sub_niche': content.get('sub_niche', 'No data') if isinstance(content, dict) else 'No data',
+                        # full_analysis.brand_safety fields
+                        'brand_safety_controversial_topics': brand_safety.get('controversial_topics', 'No data') if isinstance(brand_safety, dict) else 'No data',
+                        'brand_safety_first_flag': first_flag,
+                        'brand_safety_overall_score': brand_safety.get('overall_score', 'No data') if isinstance(brand_safety, dict) else 'No data',
+                        'brand_safety_premium_suitable': brand_safety.get('premium_suitable', 'No data') if isinstance(brand_safety, dict) else 'No data',
+                        # full_analysis.summary
+                        'full_analysis_summary': full_analysis.get('summary', 'No data') if isinstance(full_analysis, dict) else 'No data'
                     })
 
             logger.info(f"Created inclusion list (SAFE/INCLUDE) with {len(safe_channels)} channels at: {output_path}")
@@ -342,11 +406,38 @@ class CSVProcessor:
                     'channel_name',
                     'channel_url',
                     'channel_id',
-                    'confidence',
-                    'reasoning',
                     'impressions',
                     'advertisers',
-                    'insertion_orders'
+                    'insertion_orders',
+                    # Top-level Firestore fields
+                    'is_children_content',
+                    'confidence',
+                    'reasoning',
+                    'content_vertical',
+                    'content_niche',
+                    'content_format',
+                    'brand_safety_score',
+                    'premium_suitable',
+                    'geographic_focus',
+                    'primary_language',
+                    'purchase_intent',
+                    'summary',
+                    # full_analysis.compliance fields
+                    'compliance_confidence',
+                    'compliance_is_children_content',
+                    'compliance_reasoning',
+                    # full_analysis.content fields
+                    'content_confidence',
+                    'content_format_detail',
+                    'content_primary_vertical',
+                    'content_sub_niche',
+                    # full_analysis.brand_safety fields
+                    'brand_safety_controversial_topics',
+                    'brand_safety_first_flag',
+                    'brand_safety_overall_score',
+                    'brand_safety_premium_suitable',
+                    # full_analysis.summary
+                    'full_analysis_summary'
                 ]
 
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -357,15 +448,52 @@ class CSVProcessor:
                     channel_url = result.get('channel_url', '')
                     channel_id = channel_url.split('/')[-1] if '/channel/' in channel_url else ''
 
+                    # Extract nested fields safely with "No data" defaults
+                    full_analysis = result.get('full_analysis', {})
+                    compliance = full_analysis.get('compliance', {}) if isinstance(full_analysis, dict) else {}
+                    content = full_analysis.get('content', {}) if isinstance(full_analysis, dict) else {}
+                    brand_safety = full_analysis.get('brand_safety', {}) if isinstance(full_analysis, dict) else {}
+
+                    # Get first flag from brand_safety.flags array if exists, otherwise "No data"
+                    flags = brand_safety.get('flags', []) if isinstance(brand_safety, dict) else []
+                    first_flag = flags[0] if (flags and len(flags) > 0) else 'No data'
+
                     writer.writerow({
-                        'channel_name': result.get('channel_name', 'Unknown'),
+                        'channel_name': result.get('channel_name', 'No data'),
                         'channel_url': channel_url,
                         'channel_id': channel_id,
-                        'confidence': result.get('confidence', 'unknown'),
-                        'reasoning': result.get('reasoning', ''),
                         'impressions': result.get('impressions', 0),
-                        'advertisers': ', '.join(result.get('advertisers', [])),
-                        'insertion_orders': ', '.join(result.get('insertion_orders', []))
+                        'advertisers': ', '.join(result.get('advertisers', [])) if result.get('advertisers') else 'No data',
+                        'insertion_orders': ', '.join(result.get('insertion_orders', [])) if result.get('insertion_orders') else 'No data',
+                        # Top-level Firestore fields
+                        'is_children_content': result.get('is_children_content', 'No data'),
+                        'confidence': result.get('confidence', 'No data'),
+                        'reasoning': result.get('reasoning', 'No data'),
+                        'content_vertical': result.get('content_vertical', 'No data'),
+                        'content_niche': result.get('content_niche', 'No data'),
+                        'content_format': result.get('content_format', 'No data'),
+                        'brand_safety_score': result.get('brand_safety_score', 'No data'),
+                        'premium_suitable': result.get('premium_suitable', 'No data'),
+                        'geographic_focus': result.get('geographic_focus', 'No data'),
+                        'primary_language': result.get('primary_language', 'No data'),
+                        'purchase_intent': result.get('purchase_intent', 'No data'),
+                        'summary': result.get('summary', 'No data'),
+                        # full_analysis.compliance fields
+                        'compliance_confidence': compliance.get('confidence', 'No data') if isinstance(compliance, dict) else 'No data',
+                        'compliance_is_children_content': compliance.get('is_children_content', 'No data') if isinstance(compliance, dict) else 'No data',
+                        'compliance_reasoning': compliance.get('reasoning', 'No data') if isinstance(compliance, dict) else 'No data',
+                        # full_analysis.content fields
+                        'content_confidence': content.get('confidence', 'No data') if isinstance(content, dict) else 'No data',
+                        'content_format_detail': content.get('format', 'No data') if isinstance(content, dict) else 'No data',
+                        'content_primary_vertical': content.get('primary_vertical', 'No data') if isinstance(content, dict) else 'No data',
+                        'content_sub_niche': content.get('sub_niche', 'No data') if isinstance(content, dict) else 'No data',
+                        # full_analysis.brand_safety fields
+                        'brand_safety_controversial_topics': brand_safety.get('controversial_topics', 'No data') if isinstance(brand_safety, dict) else 'No data',
+                        'brand_safety_first_flag': first_flag,
+                        'brand_safety_overall_score': brand_safety.get('overall_score', 'No data') if isinstance(brand_safety, dict) else 'No data',
+                        'brand_safety_premium_suitable': brand_safety.get('premium_suitable', 'No data') if isinstance(brand_safety, dict) else 'No data',
+                        # full_analysis.summary
+                        'full_analysis_summary': full_analysis.get('summary', 'No data') if isinstance(full_analysis, dict) else 'No data'
                     })
 
             logger.info(f"Created exclusion list (BLOCK/EXCLUDE) with {len(children_channels)} channels at: {output_path}")
