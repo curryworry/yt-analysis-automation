@@ -213,7 +213,7 @@ class GmailService:
         Send results email with optional CSV attachments
 
         Args:
-            recipient_email: Email address to send to
+            recipient_email: Email address(es) to send to - can be a string or list of strings
             subject: Email subject
             body: Email body text (HTML supported)
             attachment_paths: Optional list of paths to CSV files to attach, or single path
@@ -240,9 +240,21 @@ class GmailService:
                 logger.warning(f"Could not proactively refresh credentials: {refresh_error}")
                 # Continue anyway - will try to send
 
+            # Handle multiple recipients
+            if isinstance(recipient_email, str):
+                # Check if it's a comma-separated list
+                if ',' in recipient_email:
+                    recipients = [email.strip() for email in recipient_email.split(',')]
+                else:
+                    recipients = [recipient_email]
+            elif isinstance(recipient_email, list):
+                recipients = recipient_email
+            else:
+                recipients = [str(recipient_email)]
+
             # Create message
             message = MIMEMultipart()
-            message['To'] = recipient_email
+            message['To'] = ', '.join(recipients)
             message['Subject'] = subject
 
             # Add body (support HTML)
@@ -285,7 +297,7 @@ class GmailService:
                     ).execute()
 
                     attachment_count = len(attachment_paths) if attachment_paths else 0
-                    logger.info(f"Results email sent to {recipient_email} with {attachment_count} attachment(s)")
+                    logger.info(f"Results email sent to {', '.join(recipients)} with {attachment_count} attachment(s)")
                     return  # Success!
 
                 except ssl.SSLEOFError as ssl_error:
