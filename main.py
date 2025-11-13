@@ -270,8 +270,10 @@ def process_dv360_report(request=None):
             logger.info(f"New channels needing OpenAI analysis: {len(channels_to_analyze)}")
 
             # Step 7: Process uncategorized channels in batches (YouTube + OpenAI combined)
-            # Time-aware processing: stop at 45 minutes
-            MAX_RUNTIME = 45 * 60  # 45 minutes in seconds
+            # Time-aware processing: stop with enough buffer for Step 8 + CSV generation
+            CLOUD_FUNCTION_TIMEOUT = 60 * 60  # 60 minutes total
+            BATCH_SAFETY_BUFFER = 10 * 60    # 10 minutes buffer (batch can take 8-10 min)
+            MAX_RUNTIME = CLOUD_FUNCTION_TIMEOUT - BATCH_SAFETY_BUFFER  # 50 minutes
             BATCH_SIZE = 100
             quota_exceeded = False
 
@@ -290,13 +292,17 @@ def process_dv360_report(request=None):
                 # Process batches with time awareness
                 for batch_num, batch in enumerate(batches, 1):
                     # Check if we're approaching timeout
+                    # Stop if we've reached MAX_RUNTIME (which is CLOUD_FUNCTION_TIMEOUT - 10min buffer)
                     elapsed = (datetime.now() - start_time).total_seconds()
-                    if elapsed > MAX_RUNTIME:
+                    time_remaining_total = CLOUD_FUNCTION_TIMEOUT - elapsed
+
+                    if elapsed >= MAX_RUNTIME:
                         logger.warning(f"Approaching timeout at batch {batch_num}/{len(batches)}")
-                        logger.warning(f"Stopping after {elapsed/60:.1f} minutes")
+                        logger.warning(f"Stopping after {elapsed/60:.1f} minutes (total time remaining: {time_remaining_total/60:.1f} min)")
+                        logger.warning(f"Skipping remaining {len(batches) - batch_num + 1} batches to avoid timeout")
                         break
 
-                    logger.info(f"Processing batch {batch_num}/{len(batches)} ({len(batch)} channels)")
+                    logger.info(f"Processing batch {batch_num}/{len(batches)} ({len(batch)} channels) - Elapsed: {elapsed/60:.1f}min / {CLOUD_FUNCTION_TIMEOUT/60:.0f}min")
 
                     try:
                         batch_results = process_channel_batch_combined(
