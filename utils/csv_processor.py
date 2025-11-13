@@ -84,6 +84,8 @@ class CSVProcessor:
             'insertion_orders': set()
         })
 
+        unknown_count = 0
+
         try:
             for row in rows:
                 # Handle both old and new DV360 CSV column formats
@@ -100,8 +102,15 @@ class CSVProcessor:
 
                 # Aggregate data for this channel
                 impressions = self._parse_impressions(row.get('Impressions', '0'))
+                placement_name = row.get('Placement Name (All YouTube Channels)', row.get('Placement Name', ''))
 
-                channel_data[channel_url]['placement_name'] = row.get('Placement Name (All YouTube Channels)', row.get('Placement Name', ''))
+                # Skip channels with "Unknown" placement name (removed by YouTube)
+                if placement_name.strip().lower() == 'unknown':
+                    unknown_count += 1
+                    logger.debug(f"Skipping channel with 'Unknown' placement name: {channel_url}")
+                    continue
+
+                channel_data[channel_url]['placement_name'] = placement_name
                 channel_data[channel_url]['impressions'] += impressions
                 channel_data[channel_url]['advertisers'].add(row.get('Advertiser', 'Unknown'))
                 channel_data[channel_url]['insertion_orders'].add(row.get('Insertion Order', 'Unknown'))
@@ -113,13 +122,25 @@ class CSVProcessor:
                 channel_data[channel_url]['advertisers'] = list(channel_data[channel_url]['advertisers'])
                 channel_data[channel_url]['insertion_orders'] = list(channel_data[channel_url]['insertion_orders'])
 
-            logger.info(f"Extracted {len(channel_data)} unique YouTube channels")
+            # Sort channels by impressions (descending) - focus on high-traffic channels first
+            sorted_channels = dict(sorted(
+                channel_data.items(),
+                key=lambda item: item[1]['impressions'],
+                reverse=True
+            ))
+
+            logger.info(f"Extracted {len(sorted_channels)} unique YouTube channels (sorted by impressions)")
+            if unknown_count > 0:
+                logger.info(f"Skipped {unknown_count} channels with 'Unknown' placement name (removed by YouTube)")
+            if sorted_channels:
+                top_channel = next(iter(sorted_channels.items()))
+                logger.info(f"Top channel has {top_channel[1]['impressions']:,} impressions")
 
         except Exception as error:
             logger.error(f"Error extracting channels: {error}")
             raise
 
-        return dict(channel_data)
+        return sorted_channels
 
     def filter_channels_by_keywords(self, channel_data):
         """
